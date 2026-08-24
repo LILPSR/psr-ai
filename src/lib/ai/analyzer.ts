@@ -1,187 +1,59 @@
 import { PromptAnalysis } from "./types"
 
-const groqKey = process.env.GROQ_API_KEY
+// --------------------------------------------------
+// Fast local prompt analyzer
+// --------------------------------------------------
+//
+// IMPORTANT:
+// We intentionally do NOT call an AI model here.
+//
+// The analyzer's job is classification, not answering.
+// Using another AI call just to classify every prompt
+// adds unnecessary latency and API usage.
+//
+// Common prompts are classified locally in milliseconds.
+// --------------------------------------------------
 
-const ANALYZER_SYSTEM = `
-You are the routing analyzer for an AI orchestration system.
+function makeAnalysis(
+  task_type: PromptAnalysis["task_type"],
+  difficulty: PromptAnalysis["difficulty"],
+  options: {
+    needs_web_search?: boolean
+    needs_code_execution?: boolean
+    needs_multimodal?: boolean
+    requires_verification?: boolean
+    reasoning: string
+  },
+): PromptAnalysis {
+  return {
+    task_type,
+    difficulty,
 
-Your job is NOT to answer the user's question.
+    needs_web_search:
+      options.needs_web_search ?? false,
 
-Your job is to analyze the user's prompt and determine what kind of task it is and what capabilities are required.
+    needs_code_execution:
+      options.needs_code_execution ?? false,
 
-Return ONLY valid JSON.
+    needs_multimodal:
+      options.needs_multimodal ?? false,
 
-Use exactly this schema:
+    is_ambiguous: false,
 
-{
-  "task_type": "coding" | "debugging" | "math_reasoning" | "general_reasoning" | "current_info" | "creative_writing" | "factual_qa" | "multimodal" | "ambiguous",
-  "difficulty": "low" | "medium" | "high",
-  "needs_web_search": boolean,
-  "needs_code_execution": boolean,
-  "needs_multimodal": boolean,
-  "is_ambiguous": boolean,
-  "ambiguity_clarifying_question": string | null,
-  "requires_verification": boolean,
-  "reasoning": string
+    ambiguity_clarifying_question: null,
+
+    requires_verification:
+      options.requires_verification ?? true,
+
+    reasoning: options.reasoning,
+  }
 }
 
-CLASSIFICATION RULES:
+// --------------------------------------------------
+// Helpers
+// --------------------------------------------------
 
-coding:
-- Writing new code
-- Programming questions
-- Creating functions
-- Implementing software
-- Algorithms
-- APIs
-- React
-- JavaScript
-- TypeScript
-- Python
-- C/C++
-- Software architecture
-
-debugging:
-- Fixing broken code
-- Finding bugs
-- Runtime errors
-- Compiler errors
-- Debugging existing code
-- "Why isn't this working?"
-
-math_reasoning:
-- Mathematics
-- Equations
-- Calculations
-- Numerical problems
-- Probability
-- Algebra
-- Calculus
-- Physics calculations where mathematical derivation is central
-
-general_reasoning:
-- Complex reasoning
-- Planning
-- Analysis
-- Comparisons
-- Decisions
-- Strategy
-- Multi-step problems
-
-current_info:
-- News
-- Current events
-- Recent events
-- Current prices
-- Current sports
-- Latest information
-- Information that changes over time
-
-creative_writing:
-- Stories
-- Poems
-- Scripts
-- Fiction
-- Creative concepts
-- Characters
-- Narrative writing
-
-factual_qa:
-- Stable factual questions
-- Definitions
-- Historical facts
-- General knowledge
-- Simple factual questions
-
-multimodal:
-- Use ONLY when the user actually provides or refers to an image,
-  screenshot, audio, video, or other media.
-
-ambiguous:
-- Use ONLY when the user's intent genuinely cannot be determined.
-- Do NOT mark simple questions as ambiguous.
-
-DIFFICULTY:
-
-low:
-- Simple factual questions
-- Simple calculations
-- Straightforward requests
-
-medium:
-- Multiple reasoning steps
-- Moderate coding
-- Moderate analysis
-
-high:
-- Complex coding
-- Difficult mathematics
-- Deep reasoning
-- Multiple constraints
-- High-stakes questions
-
-WEB SEARCH:
-
-Set needs_web_search=true when the answer depends on information that may have changed recently.
-
-CODE EXECUTION:
-
-Set needs_code_execution=true only when actually running code would materially improve correctness.
-
-VERIFICATION:
-
-Set requires_verification=true for:
-- Mathematics
-- Coding
-- Debugging
-- Factual questions
-- Current information
-- Objectively checkable answers
-- High-stakes questions
-
-Set requires_verification=false for:
-- Pure creative writing
-- Casual conversation
-- Subjective creative requests
-
-IMPORTANT EXAMPLES:
-
-"What is 2 + 2?"
-=> math_reasoning, low
-
-"What is the capital of Japan?"
-=> factual_qa, low
-
-"Write a Python function to reverse a string"
-=> coding
-
-"Why is my React component crashing?"
-=> debugging
-
-"What happened with SRM admissions recently?"
-=> current_info, needs_web_search=true
-
-"Write me a horror story"
-=> creative_writing
-
-"Compare SRM and VIT for CSE"
-=> general_reasoning
-
-"Explain quantum computing simply"
-=> factual_qa
-
-Always return valid JSON.
-`
-
-function cleanJSON(text: string): string {
-  return text
-    .replace(/^```json\s*/i, "")
-    .replace(/^```\s*/i, "")
-    .replace(/\s*```$/i, "")
-    .trim()
-}
-
-function containsAny(
+function includesAny(
   text: string,
   words: string[],
 ): boolean {
@@ -190,223 +62,340 @@ function containsAny(
   )
 }
 
+function looksLikeMath(prompt: string): boolean {
+  const text = prompt
+    .toLowerCase()
+    .trim()
+
+  // Very simple arithmetic such as:
+  // 2 + 2
+  // 15 * 7
+  // 100 / 4
+  // 25 - 9
+  if (
+    /^\s*-?\d+(?:\.\d+)?\s*[+\-*/%]\s*-?\d+(?:\.\d+)?\s*\??\s*$/.test(
+      text,
+    )
+  ) {
+    return true
+  }
+
+  const mathWords = [
+    "calculate",
+    "calculation",
+    "math",
+    "mathematics",
+    "equation",
+    "solve",
+    "integral",
+    "derivative",
+    "differentiate",
+    "integration",
+    "probability",
+    "statistics",
+    "percentage",
+    "percent",
+    "factorial",
+    "algebra",
+    "calculus",
+    "matrix",
+    "matrices",
+    "determinant",
+    "vector",
+    "vectors",
+    "geometry",
+    "trigonometry",
+    "logarithm",
+    "quadratic",
+    "permutation",
+    "combination",
+  ]
+
+  return includesAny(text, mathWords)
+}
+
 // --------------------------------------------------
-// Local fallback
+// Multimodal detection
 // --------------------------------------------------
 
-function localFallback(
-  prompt: string,
-): PromptAnalysis {
-  const lower = prompt.toLowerCase().trim()
+function looksMultimodal(prompt: string): boolean {
+  const text = prompt.toLowerCase()
+
+  const mediaWords = [
+    "image",
+    "picture",
+    "photo",
+    "photograph",
+    "screenshot",
+    "screen shot",
+    "diagram",
+    "chart",
+    "graph",
+    "image i uploaded",
+    "picture i uploaded",
+    "photo i uploaded",
+    "screenshot i uploaded",
+    "look at this",
+    "look at the image",
+    "look at this image",
+    "what's in this image",
+    "what is in this image",
+    "analyze this image",
+    "analyze the screenshot",
+  ]
+
+  return includesAny(text, mediaWords)
+}
+
+// --------------------------------------------------
+// Current information detection
+// --------------------------------------------------
+
+function looksCurrentInfo(prompt: string): boolean {
+  const text = prompt.toLowerCase()
+
+  const currentWords = [
+    "latest",
+    "recent",
+    "recently",
+    "today",
+    "tonight",
+    "yesterday",
+    "currently",
+    "current",
+    "right now",
+    "this week",
+    "this month",
+    "this year",
+    "breaking news",
+    "news",
+    "what happened",
+    "what's happening",
+    "whats happening",
+    "what is happening",
+    "just happened",
+    "new update",
+    "new updates",
+    "update on",
+    "updates on",
+    "admission",
+    "admissions",
+    "deadline",
+    "deadlines",
+    "price",
+    "prices",
+    "stock price",
+    "share price",
+    "weather",
+    "forecast",
+    "score",
+    "scores",
+    "standings",
+    "ranking",
+    "rankings",
+    "results",
+    "election",
+    "elections",
+  ]
+
+  return includesAny(text, currentWords)
+}
+
+// --------------------------------------------------
+// Coding detection
+// --------------------------------------------------
+
+function looksCoding(prompt: string): boolean {
+  const text = prompt.toLowerCase()
 
   const codingWords = [
+    "write code",
+    "write a program",
+    "write a function",
+    "write python",
+    "write javascript",
+    "write typescript",
+    "write java",
+    "write c code",
+    "write c++",
     "code",
     "coding",
+    "programming",
     "python",
     "javascript",
     "typescript",
     "java",
     "c++",
     "c#",
-    "function",
-    "program",
-    "programming",
-    "algorithm",
-    "api",
+    "html",
+    "css",
     "react",
     "next.js",
     "nextjs",
-    "debug",
-    "bug",
-    "error",
-    "compile",
-    "compiler",
+    "node.js",
+    "nodejs",
+    "api",
+    "sdk",
+    "function",
+    "class",
+    "algorithm",
+    "algorithms",
+    "database",
+    "sql",
+    "query",
+    "program",
     "implement",
-    "developer",
+    "implementation",
     "software",
+    "developer",
+    "development",
+    "github",
+    "git",
+    "component",
+    "backend",
+    "frontend",
+    "full stack",
+    "full-stack",
   ]
 
-  const currentWords = [
-    "latest",
-    "recent",
-    "today",
-    "currently",
-    "current",
-    "news",
-    "yesterday",
-    "this week",
-    "this month",
-    "happened",
-    "admission",
-    "admissions",
-    "price",
-    "ranking",
-    "score",
-    "weather",
+  return includesAny(text, codingWords)
+}
+
+// --------------------------------------------------
+// Debugging detection
+// --------------------------------------------------
+
+function looksDebugging(prompt: string): boolean {
+  const text = prompt.toLowerCase()
+
+  const debuggingWords = [
+    "debug",
+    "debugging",
+    "bug",
+    "bugs",
+    "error",
+    "errors",
+    "exception",
+    "stack trace",
+    "traceback",
+    "crash",
+    "crashing",
+    "broken",
+    "not working",
+    "doesn't work",
+    "doesnt work",
+    "isn't working",
+    "isnt working",
+    "why does this fail",
+    "why is this failing",
+    "why isn't this working",
+    "why isnt this working",
+    "fix this code",
+    "fix my code",
+    "fix the code",
+    "compiler error",
+    "compile error",
+    "runtime error",
+    "syntax error",
   ]
+
+  return includesAny(text, debuggingWords)
+}
+
+// --------------------------------------------------
+// Creative writing detection
+// --------------------------------------------------
+
+function looksCreative(prompt: string): boolean {
+  const text = prompt.toLowerCase()
 
   const creativeWords = [
-    "story",
+    "write a story",
+    "write me a story",
+    "write a poem",
+    "write me a poem",
     "poem",
     "poetry",
+    "short story",
     "fiction",
-    "creative",
     "novel",
+    "screenplay",
     "script",
+    "creative writing",
+    "creative",
     "character",
     "plot",
+    "dialogue",
+    "horror story",
+    "love story",
+    "funny story",
+    "comedy sketch",
+    "lyrics",
   ]
 
-  const mathWords = [
-    "calculate",
-    "equation",
-    "solve",
-    "math",
-    "mathematics",
-    "integral",
-    "derivative",
-    "probability",
-    "percentage",
-    "factorial",
-    "algebra",
-    "calculus",
-  ]
+  return includesAny(text, creativeWords)
+}
+
+// --------------------------------------------------
+// General reasoning detection
+// --------------------------------------------------
+
+function looksReasoning(prompt: string): boolean {
+  const text = prompt.toLowerCase()
 
   const reasoningWords = [
     "compare",
-    "analyze",
-    "analysis",
-    "decision",
-    "strategy",
-    "plan",
-    "choose",
+    "comparison",
+    "compare these",
+    "compare them",
     "which is better",
+    "which should i choose",
+    "what should i choose",
+    "should i",
     "pros and cons",
+    "advantages and disadvantages",
+    "analyze",
+    "analyse",
+    "analysis",
+    "evaluate",
+    "decision",
+    "decide",
+    "strategy",
+    "strategize",
+    "plan",
+    "planning",
+    "recommend",
+    "recommendation",
+    "why should",
+    "how should i",
+    "what would be better",
+    "tradeoff",
+    "trade-offs",
+    "explain why",
   ]
 
-  // Current information
-  if (containsAny(lower, currentWords)) {
-    return {
-      task_type: "current_info",
-      difficulty: "medium",
-      needs_web_search: true,
-      needs_code_execution: false,
-      needs_multimodal: false,
-      is_ambiguous: false,
-      ambiguity_clarifying_question: null,
-      requires_verification: true,
-      reasoning:
-        "The prompt appears to depend on information that may have changed recently.",
-    }
-  }
+  return includesAny(text, reasoningWords)
+}
 
-  // Debugging
-  if (
-    lower.includes("debug") ||
-    lower.includes("bug") ||
-    lower.includes("not working") ||
-    lower.includes("doesn't work") ||
-    lower.includes("doesnt work") ||
-    lower.includes("error") ||
-    lower.includes("crash") ||
-    lower.includes("broken")
-  ) {
-    return {
-      task_type: "debugging",
-      difficulty: "medium",
-      needs_web_search: false,
-      needs_code_execution: false,
-      needs_multimodal: false,
-      is_ambiguous: false,
-      ambiguity_clarifying_question: null,
-      requires_verification: true,
-      reasoning:
-        "The prompt appears to involve debugging or fixing an existing implementation.",
-    }
-  }
+// --------------------------------------------------
+// Code execution detection
+// --------------------------------------------------
 
-  // Coding
-  if (containsAny(lower, codingWords)) {
-    return {
-      task_type: "coding",
-      difficulty: "medium",
-      needs_web_search: false,
-      needs_code_execution: false,
-      needs_multimodal: false,
-      is_ambiguous: false,
-      ambiguity_clarifying_question: null,
-      requires_verification: true,
-      reasoning:
-        "The prompt appears to involve programming or software development.",
-    }
-  }
+function needsCodeExecution(prompt: string): boolean {
+  const text = prompt.toLowerCase()
 
-  // Creative
-  if (containsAny(lower, creativeWords)) {
-    return {
-      task_type: "creative_writing",
-      difficulty: "medium",
-      needs_web_search: false,
-      needs_code_execution: false,
-      needs_multimodal: false,
-      is_ambiguous: false,
-      ambiguity_clarifying_question: null,
-      requires_verification: false,
-      reasoning:
-        "The prompt is primarily a creative writing request.",
-    }
-  }
-
-  // Math
-  if (
-    containsAny(lower, mathWords) ||
-    /^\s*\d+\s*[+\-*/]\s*\d+\s*\??\s*$/.test(
-      lower,
-    )
-  ) {
-    return {
-      task_type: "math_reasoning",
-      difficulty: "low",
-      needs_web_search: false,
-      needs_code_execution: false,
-      needs_multimodal: false,
-      is_ambiguous: false,
-      ambiguity_clarifying_question: null,
-      requires_verification: true,
-      reasoning:
-        "The prompt contains a mathematical or numerical problem.",
-    }
-  }
-
-  // General reasoning
-  if (containsAny(lower, reasoningWords)) {
-    return {
-      task_type: "general_reasoning",
-      difficulty: "medium",
-      needs_web_search: false,
-      needs_code_execution: false,
-      needs_multimodal: false,
-      is_ambiguous: false,
-      ambiguity_clarifying_question: null,
-      requires_verification: true,
-      reasoning:
-        "The prompt requires comparison, analysis, planning, or multi-step reasoning.",
-    }
-  }
-
-  // Default: simple factual question
-  return {
-    task_type: "factual_qa",
-    difficulty: "low",
-    needs_web_search: false,
-    needs_code_execution: false,
-    needs_multimodal: false,
-    is_ambiguous: false,
-    ambiguity_clarifying_question: null,
-    requires_verification: true,
-    reasoning:
-      "The prompt appears to be a straightforward factual question.",
-  }
+  return includesAny(text, [
+    "run this code",
+    "execute this code",
+    "execute the code",
+    "run the program",
+    "run this program",
+    "test this code",
+    "calculate using python",
+    "use python to calculate",
+    "simulate this",
+    "simulation",
+  ])
 }
 
 // --------------------------------------------------
@@ -416,144 +405,197 @@ function localFallback(
 export async function analyzePrompt(
   prompt: string,
 ): Promise<PromptAnalysis> {
-  if (!prompt.trim()) {
+  const trimmed = prompt.trim()
+
+  if (!trimmed) {
     throw new Error("Prompt cannot be empty")
   }
 
-  // If Groq isn't configured, use local classification.
-  if (!groqKey) {
-    console.warn(
-      "GROQ_API_KEY is missing. Using local fallback analyzer.",
-    )
+  const lower = trimmed.toLowerCase()
 
-    return localFallback(prompt)
-  }
+  console.log(
+    "Analyzing prompt locally:",
+    trimmed,
+  )
 
-  try {
-    console.log(
-      "Analyzing prompt with Groq:",
-      prompt,
-    )
+  // ------------------------------------------------
+  // 1. Multimodal
+  // ------------------------------------------------
 
-    const response = await fetch(
-      "https://api.groq.com/openai/v1/chat/completions",
+  if (looksMultimodal(trimmed)) {
+    return makeAnalysis(
+      "multimodal",
+      "medium",
       {
-        method: "POST",
-
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${groqKey}`,
-        },
-
-        body: JSON.stringify({
-          model: "openai/gpt-oss-20b",
-
-          messages: [
-            {
-              role: "system",
-              content: ANALYZER_SYSTEM,
-            },
-            {
-              role: "user",
-              content: prompt,
-            },
-          ],
-
-          temperature: 0,
-
-          response_format: {
-            type: "json_object",
-          },
-        }),
+        needs_multimodal: true,
+        requires_verification: true,
+        reasoning:
+          "The prompt refers to an image, screenshot, diagram, chart, or other media.",
       },
     )
-
-    if (!response.ok) {
-      const errorText =
-        await response.text()
-
-      console.error(
-        "Groq analyzer failed:",
-        response.status,
-        errorText,
-      )
-
-      console.warn(
-        "Using local fallback analyzer.",
-      )
-
-      return localFallback(prompt)
-    }
-
-    const data = await response.json()
-
-    const text =
-      data.choices?.[0]?.message?.content ?? ""
-
-    if (!text) {
-      console.warn(
-        "Groq analyzer returned an empty response.",
-      )
-
-      return localFallback(prompt)
-    }
-
-    const parsed =
-      JSON.parse(
-        cleanJSON(text),
-      ) as Partial<PromptAnalysis>
-
-    return {
-      task_type:
-        parsed.task_type ??
-        "factual_qa",
-
-      difficulty:
-        parsed.difficulty ??
-        "medium",
-
-      needs_web_search:
-        Boolean(
-          parsed.needs_web_search,
-        ),
-
-      needs_code_execution:
-        Boolean(
-          parsed.needs_code_execution,
-        ),
-
-      needs_multimodal:
-        Boolean(
-          parsed.needs_multimodal,
-        ),
-
-      is_ambiguous:
-        Boolean(
-          parsed.is_ambiguous,
-        ),
-
-      ambiguity_clarifying_question:
-        parsed.ambiguity_clarifying_question ??
-        null,
-
-      requires_verification:
-        parsed.requires_verification ??
-        true,
-
-      reasoning:
-        parsed.reasoning ??
-        "Prompt analyzed by the routing model.",
-    }
-  } catch (error) {
-    console.error(
-      "Groq prompt analyzer failed:",
-      error,
-    )
-
-    console.warn(
-      "Using local fallback analyzer.",
-    )
-
-    return localFallback(prompt)
   }
+
+  // ------------------------------------------------
+  // 2. Current information
+  // ------------------------------------------------
+  //
+  // This must come before generic factual questions.
+  // Example:
+  // "What happened to SRM admissions?"
+  // -> current_info
+  // -> web search required
+  // ------------------------------------------------
+
+  if (looksCurrentInfo(trimmed)) {
+    return makeAnalysis(
+      "current_info",
+      "medium",
+      {
+        needs_web_search: true,
+        requires_verification: true,
+        reasoning:
+          "The prompt depends on information that may have changed recently, so current web information is required.",
+      },
+    )
+  }
+
+  // ------------------------------------------------
+  // 3. Debugging
+  // ------------------------------------------------
+  //
+  // Debugging comes before coding because a debugging
+  // request can contain words such as Python, React,
+  // JavaScript, etc.
+  // ------------------------------------------------
+
+  if (looksDebugging(trimmed)) {
+    return makeAnalysis(
+      "debugging",
+      trimmed.length > 500
+        ? "high"
+        : "medium",
+      {
+        needs_code_execution:
+          needsCodeExecution(trimmed),
+        requires_verification: true,
+        reasoning:
+          "The prompt appears to involve diagnosing or fixing an existing implementation.",
+      },
+    )
+  }
+
+  // ------------------------------------------------
+  // 4. Coding
+  // ------------------------------------------------
+
+  if (looksCoding(trimmed)) {
+    return makeAnalysis(
+      "coding",
+      trimmed.length > 700
+        ? "high"
+        : "medium",
+      {
+        needs_code_execution:
+          needsCodeExecution(trimmed),
+        requires_verification: true,
+        reasoning:
+          "The prompt requires programming or software-development knowledge.",
+      },
+    )
+  }
+
+  // ------------------------------------------------
+  // 5. Math
+  // ------------------------------------------------
+
+  if (looksLikeMath(trimmed)) {
+    return makeAnalysis(
+      "math_reasoning",
+      "low",
+      {
+        requires_verification: true,
+        reasoning:
+          "The prompt contains a mathematical or numerical problem.",
+      },
+    )
+  }
+
+  // ------------------------------------------------
+  // 6. Creative writing
+  // ------------------------------------------------
+
+  if (looksCreative(trimmed)) {
+    return makeAnalysis(
+      "creative_writing",
+      trimmed.length > 1000
+        ? "medium"
+        : "low",
+      {
+        requires_verification: false,
+        reasoning:
+          "The prompt is primarily a creative-writing request.",
+      },
+    )
+  }
+
+  // ------------------------------------------------
+  // 7. General reasoning
+  // ------------------------------------------------
+
+  if (looksReasoning(trimmed)) {
+    return makeAnalysis(
+      "general_reasoning",
+      trimmed.length > 500
+        ? "high"
+        : "medium",
+      {
+        requires_verification: true,
+        reasoning:
+          "The prompt requires comparison, analysis, planning, or multi-step reasoning.",
+      },
+    )
+  }
+
+  // ------------------------------------------------
+  // 8. Very long prompts
+  // ------------------------------------------------
+  //
+  // Long prompts are more likely to contain complex
+  // instructions even when they don't contain obvious
+  // keywords.
+  //
+  // We still classify them as general reasoning rather
+  // than making another API request.
+  // ------------------------------------------------
+
+  if (trimmed.length > 1200) {
+    return makeAnalysis(
+      "general_reasoning",
+      "high",
+      {
+        requires_verification: true,
+        reasoning:
+          "The prompt contains substantial instructions or constraints and is therefore treated as a complex reasoning task.",
+      },
+    )
+  }
+
+  // ------------------------------------------------
+  // 9. Default
+  // ------------------------------------------------
+  //
+  // A normal question should NEVER become ambiguous
+  // just because the classifier doesn't recognize a
+  // keyword.
+  // ------------------------------------------------
+
+  return makeAnalysis(
+    "factual_qa",
+    "low",
+    {
+      requires_verification: true,
+      reasoning:
+        "The prompt appears to be a straightforward factual question.",
+    },
+  )
 }

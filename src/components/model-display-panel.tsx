@@ -33,16 +33,247 @@ interface ModelInfo {
 const getModelInfo = (model: string): ModelInfo => {
   const normalized = model.toLowerCase()
 
-  if (normalized.includes("gemini")) {
+  // --------------------------------------------------
+  // GROQ COMPOUND
+  // --------------------------------------------------
+
+  if (
+    normalized.includes("groq/compound") ||
+    normalized === "compound"
+  ) {
     return {
-      displayName: "Gemini 3.6 Flash",
+      displayName: "Groq Compound",
+      color: "from-violet-400 to-purple-500",
+      description:
+        "Tool-capable model selected for current information and web-assisted tasks.",
+      strengths: [
+        "Web Search",
+        "Current Information",
+        "Tool Use",
+      ],
+      scores: {
+        intelligence: 93,
+        speed: 94,
+        cost: 88,
+        reasoning: 91,
+      },
+      estimatedLatency: "Dynamic",
+      tokenCost: "API dependent",
+    }
+  }
+
+  // --------------------------------------------------
+  // GPT-OSS 120B
+  // --------------------------------------------------
+
+  if (
+    normalized.includes("gpt-oss-120b")
+  ) {
+    return {
+      displayName: "GPT-OSS 120B",
+      color: "from-emerald-400 to-teal-500",
+      description:
+        "High-capability open-weight model selected for coding, debugging, and complex reasoning.",
+      strengths: [
+        "Coding",
+        "Debugging",
+        "Reasoning",
+      ],
+      scores: {
+        intelligence: 95,
+        speed: 90,
+        cost: 91,
+        reasoning: 95,
+      },
+      estimatedLatency: "Dynamic",
+      tokenCost: "API dependent",
+    }
+  }
+
+  // --------------------------------------------------
+  // GPT-OSS 20B
+  // --------------------------------------------------
+
+  if (
+    normalized.includes("gpt-oss-20b")
+  ) {
+    return {
+      displayName: "GPT-OSS 20B",
+      color: "from-emerald-400 to-teal-500",
+      description:
+        "Fast open-weight reasoning model selected for mathematical and numerical problems.",
+      strengths: [
+        "Mathematics",
+        "Reasoning",
+        "Speed",
+      ],
+      scores: {
+        intelligence: 91,
+        speed: 96,
+        cost: 94,
+        reasoning: 92,
+      },
+      estimatedLatency: "Dynamic",
+      tokenCost: "API dependent",
+    }
+  }
+
+  // --------------------------------------------------
+  // QWEN
+  // --------------------------------------------------
+
+  if (
+    normalized.includes("qwen")
+  ) {
+    return {
+      displayName: "Qwen 3.6 27B",
+      color: "from-cyan-400 to-sky-500",
+      description:
+        "Independent reasoning model used for secondary review and answer verification.",
+      strengths: [
+        "Verification",
+        "Reasoning",
+        "Analysis",
+      ],
+      scores: {
+        intelligence: 92,
+        speed: 91,
+        cost: 93,
+        reasoning: 93,
+      },
+      estimatedLatency: "Dynamic",
+      tokenCost: "API dependent",
+    }
+  }
+
+  // --------------------------------------------------
+  // LLAMA
+  // --------------------------------------------------
+
+  if (
+    normalized.includes("llama")
+  ) {
+    return {
+      displayName: "Llama 3.3 70B",
+      color: "from-pink-400 to-rose-500",
+      description:
+        "Fast general-purpose model selected for straightforward factual questions.",
+      strengths: [
+        "General Knowledge",
+        "Factual Q&A",
+        "Fast Responses",
+      ],
+      scores: {
+        intelligence: 91,
+        speed: 95,
+        cost: 94,
+        reasoning: 89,
+      },
+      estimatedLatency: "Dynamic",
+      tokenCost: "API dependent",
+    }
+  }
+
+  // --------------------------------------------------
+  // AION
+  // --------------------------------------------------
+
+  if (
+    normalized.includes("aion")
+  ) {
+    return {
+      displayName: "Aion 3.0 Mini",
+      color: "from-orange-400 to-amber-500",
+      description:
+        "Creative-capable model selected for storytelling, creative writing, and brainstorming.",
+      strengths: [
+        "Creative Writing",
+        "Storytelling",
+        "Brainstorming",
+      ],
+      scores: {
+        intelligence: 89,
+        speed: 93,
+        cost: 94,
+        reasoning: 86,
+      },
+      estimatedLatency: "Dynamic",
+      tokenCost: "API dependent",
+    }
+  }
+
+  // --------------------------------------------------
+  // GEMMA
+  // --------------------------------------------------
+
+  if (
+    normalized.includes("gemma")
+  ) {
+    return {
+      displayName: "Gemma 4 31B",
       color: "from-blue-400 to-indigo-500",
       description:
-        "Fast general-purpose model selected for reasoning, factual questions, and analysis.",
+        "Multimodal-capable model selected for understanding images and other media.",
+      strengths: [
+        "Multimodal",
+        "Image Understanding",
+        "Reasoning",
+      ],
+      scores: {
+        intelligence: 92,
+        speed: 91,
+        cost: 92,
+        reasoning: 90,
+      },
+      estimatedLatency: "Dynamic",
+      tokenCost: "API dependent",
+    }
+  }
+
+  // --------------------------------------------------
+  // NEMOTRON
+  // --------------------------------------------------
+
+  if (
+    normalized.includes("nemotron")
+  ) {
+    return {
+      displayName: "NVIDIA Nemotron",
+      color: "from-green-400 to-emerald-500",
+      description:
+        "Secondary model used for independent multimodal verification.",
+      strengths: [
+        "Verification",
+        "Reasoning",
+        "Multimodal",
+      ],
+      scores: {
+        intelligence: 93,
+        speed: 87,
+        cost: 91,
+        reasoning: 93,
+      },
+      estimatedLatency: "Dynamic",
+      tokenCost: "API dependent",
+    }
+  }
+
+  // --------------------------------------------------
+  // GEMINI
+  // --------------------------------------------------
+
+  if (
+    normalized.includes("gemini")
+  ) {
+    return {
+      displayName: "Gemini",
+      color: "from-blue-400 to-indigo-500",
+      description:
+        "Google model available for reasoning, factual questions, and multimodal tasks.",
       strengths: [
         "Reasoning",
         "Factual Q&A",
-        "Analysis",
+        "Multimodal",
       ],
       scores: {
         intelligence: 94,
@@ -55,30 +286,9 @@ const getModelInfo = (model: string): ModelInfo => {
     }
   }
 
-  if (
-    normalized.includes("gpt-oss") ||
-    normalized.includes("openai")
-  ) {
-    return {
-      displayName: "GPT-OSS",
-      color: "from-emerald-400 to-teal-500",
-      description:
-        "Independent verification model used to cross-check answers.",
-      strengths: [
-        "Verification",
-        "Reasoning",
-        "Factual checking",
-      ],
-      scores: {
-        intelligence: 94,
-        speed: 88,
-        cost: 90,
-        reasoning: 94,
-      },
-      estimatedLatency: "Dynamic",
-      tokenCost: "API dependent",
-    }
-  }
+  // --------------------------------------------------
+  // CLAUDE
+  // --------------------------------------------------
 
   if (
     normalized.includes("claude") ||
@@ -105,34 +315,18 @@ const getModelInfo = (model: string): ModelInfo => {
     }
   }
 
-  if (normalized.includes("llama")) {
-    return {
-      displayName: "Llama",
-      color: "from-pink-400 to-rose-500",
-      description:
-        "Open model suitable for general reasoning and fast responses.",
-      strengths: [
-        "General chat",
-        "Reasoning",
-        "Fast responses",
-      ],
-      scores: {
-        intelligence: 90,
-        speed: 95,
-        cost: 95,
-        reasoning: 88,
-      },
-      estimatedLatency: "Dynamic",
-      tokenCost: "API dependent",
-    }
-  }
+  // --------------------------------------------------
+  // DEEPSEEK
+  // --------------------------------------------------
 
-  if (normalized.includes("deepseek")) {
+  if (
+    normalized.includes("deepseek")
+  ) {
     return {
       displayName: "DeepSeek",
       color: "from-cyan-400 to-sky-500",
       description:
-        "Strong model for coding, debugging, and technical reasoning.",
+        "Strong model for coding, debugging, algorithms, and technical reasoning.",
       strengths: [
         "Coding",
         "Debugging",
@@ -148,6 +342,10 @@ const getModelInfo = (model: string): ModelInfo => {
       tokenCost: "API dependent",
     }
   }
+
+  // --------------------------------------------------
+  // UNKNOWN MODEL
+  // --------------------------------------------------
 
   return {
     displayName: model,
@@ -201,6 +399,7 @@ export function ModelDisplayPanel({
       }}
     >
       {/* Header */}
+
       <div className="flex items-center gap-4 mb-6">
         <div
           className={`w-12 h-12 rounded-xl bg-gradient-to-br ${data.color} flex items-center justify-center`}
@@ -220,6 +419,7 @@ export function ModelDisplayPanel({
       </div>
 
       {/* Actual model ID */}
+
       <div className="mb-5">
         <p className="text-[10px] uppercase tracking-wider text-muted-foreground mb-1">
           Model ID
@@ -231,11 +431,13 @@ export function ModelDisplayPanel({
       </div>
 
       {/* Description */}
+
       <p className="text-sm text-muted-foreground mb-6">
         {data.description}
       </p>
 
       {/* Strengths */}
+
       <div className="mb-6">
         <h4 className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-2">
           Best For
@@ -254,6 +456,7 @@ export function ModelDisplayPanel({
       </div>
 
       {/* Scores */}
+
       <div className="space-y-3 mb-6">
         {[
           {
@@ -314,6 +517,7 @@ export function ModelDisplayPanel({
       </div>
 
       {/* Stats */}
+
       <div className="grid grid-cols-2 gap-4 pt-4 border-t border-border/50">
         <div>
           <div className="flex items-center gap-1.5 text-xs text-muted-foreground mb-1">
