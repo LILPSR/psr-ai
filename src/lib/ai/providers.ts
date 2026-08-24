@@ -101,10 +101,16 @@ async function callGroq(
 
   const data = await response.json()
 
+  const rawText =
+    data.choices?.[0]?.message?.content ?? ""
+
+  // Remove hidden reasoning blocks if the model returns them.
+  const cleanedText = rawText
+    .replace(/<think>[\s\S]*?<\/think>/gi, "")
+    .trim()
+
   return {
-    text:
-      data.choices?.[0]?.message?.content ??
-      "",
+    text: cleanedText,
     provider: "groq",
     model,
     tools_used: [],
@@ -163,11 +169,17 @@ async function callOpenRouter(
   const actualModel =
     data.model ?? model
 
-  return {
-    text:
-      data.choices?.[0]?.message?.content ??
-      "",
+  const rawText =
+    data.choices?.[0]?.message?.content ?? ""
 
+  // Remove hidden reasoning blocks from models
+  // such as Qwen when they are included in the response.
+  const cleanedText = rawText
+    .replace(/<think>[\s\S]*?<\/think>/gi, "")
+    .trim()
+
+  return {
+    text: cleanedText,
     provider: "openrouter",
     model: actualModel,
     tools_used: [],
