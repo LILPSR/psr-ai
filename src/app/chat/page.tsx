@@ -4,7 +4,7 @@ import { useState, useCallback } from "react"
 import { motion, AnimatePresence } from "framer-motion"
 import { Sidebar } from "@/components/chat/sidebar"
 import { Navbar } from "@/components/chat/navbar"
-import { ChatArea, Message } from "@/components/chat/chat-area"
+import { ChatArea, Message, Attachment } from "@/components/chat/chat-area"
 import {
   RoutingVisualization,
   RoutingStep,
@@ -61,12 +61,13 @@ export default function ChatPage() {
   // REAL AI ROUTER
   // ============================================================
 
-  const handleSend = useCallback(async (content: string) => {
+  const handleSend = useCallback(async (content: string, attachment?: Attachment) => {
     const userMessage: Message = {
       id: Date.now().toString(),
       role: "user",
       content,
       timestamp: new Date(),
+      attachment,
     }
 
     setMessages((prev) => [...prev, userMessage])
@@ -112,6 +113,7 @@ export default function ChatPage() {
         },
         body: JSON.stringify({
           prompt: content,
+          attachment: attachment,
         }),
       })
 
