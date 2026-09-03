@@ -31,8 +31,6 @@ export async function POST(request: NextRequest) {
 
     const analysis = await analyzePrompt(prompt)
 
-    console.log("Prompt analysis:", analysis)
-
     // --------------------------------------------------
     // 2. HANDLE AMBIGUOUS REQUESTS
     // --------------------------------------------------
@@ -244,11 +242,6 @@ export async function POST(request: NextRequest) {
           primaryAnswer,
           secondaryAnswer,
           analysis.task_type,
-        )
-
-        console.log(
-          "Verification result:",
-          verificationResult,
         )
 
       } catch (error) {

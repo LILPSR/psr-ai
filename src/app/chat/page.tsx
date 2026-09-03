@@ -123,8 +123,6 @@ export default function ChatPage() {
 
       const data = await response.json()
 
-      console.log("PSR AI backend response:", data)
-
       // --------------------------------------------------------
       // Update routing visualization
       // --------------------------------------------------------
