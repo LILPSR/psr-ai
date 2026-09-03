@@ -2,7 +2,7 @@
 
 import { motion, AnimatePresence } from "framer-motion"
 import { useState, useRef, useEffect } from "react"
-import { Send, Sparkles, User, Copy, ThumbsUp, ThumbsDown, RefreshCw } from "lucide-react"
+import { Send, Sparkles, User, Copy, ThumbsUp, ThumbsDown, RefreshCw, Mic, MicOff } from "lucide-react"
 import ReactMarkdown from "react-markdown"
 
 export interface Message {
@@ -40,8 +40,140 @@ export function ChatArea({ messages, isLoading, onSend }: ChatAreaProps) {
     scrollToBottom()
   }, [messages])
 
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault()
+  const [isVoiceMode, setIsVoiceMode] = useState(false)
+  const isVoiceModeRef = useRef(isVoiceMode)
+
+  useEffect(() => {
+      isVoiceModeRef.current = isVoiceMode
+  }, [isVoiceMode])
+
+  const [isListening, setIsListening] = useState(false)
+  const recognitionRef = useRef<SpeechRecognition | null>(null)
+  const isSpeakingRef = useRef(false)
+
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition
+      if (SpeechRecognition) {
+        const recognition = new SpeechRecognition()
+        recognition.continuous = false
+        recognition.interimResults = true
+        recognition.lang = "en-US"
+
+        recognition.onstart = () => {
+          setIsListening(true)
+        }
+
+        recognition.onresult = (event: SpeechRecognitionEvent) => {
+          let currentTranscript = ""
+          for (let i = event.resultIndex; i < event.results.length; i++) {
+            currentTranscript += event.results[i][0].transcript
+          }
+          setInput(currentTranscript)
+        }
+
+        recognition.onerror = (event: SpeechRecognitionErrorEvent) => {
+          console.error("Speech recognition error", event.error)
+          setIsListening(false)
+        }
+
+        recognition.onend = () => {
+          setIsListening(false)
+        }
+
+        recognitionRef.current = recognition
+      }
+    }
+
+    return () => {
+      if (recognitionRef.current) {
+        recognitionRef.current.abort()
+      }
+    }
+  }, []) // Initialize only once
+
+  // Handle sending transcript
+  useEffect(() => {
+     if (isVoiceMode && !isListening && input.trim() && !isLoading && !isSpeakingRef.current) {
+         // If we stopped listening, have input, and are not loading/speaking, send the message
+         onSend(input.trim())
+         setInput("")
+     } else if (isVoiceMode && !isListening && !isLoading && !isSpeakingRef.current) {
+         // Auto restart listening if voice mode is on and we shouldn't be paused
+          try {
+              recognitionRef.current?.start()
+          } catch (_e) {
+              // already started
+          }
+     }
+  }, [isListening, isVoiceMode, input, isLoading, onSend])
+
+  // Keep track of messages that have already been read to avoid reading old messages when voice mode is toggled on,
+  // or reading the same message multiple times.
+  const [readMessages, setReadMessages] = useState<Set<string>>(new Set())
+
+  // Text to Speech
+  useEffect(() => {
+    if (isVoiceMode && messages.length > 0 && !isLoading) {
+      const lastMessage = messages[messages.length - 1]
+      // Only read if it's an assistant message, we're not currently loading (to avoid reading chunks if streaming),
+      // and we haven't read this message ID yet.
+      if (lastMessage.role === "assistant" && !readMessages.has(lastMessage.id)) {
+        isSpeakingRef.current = true
+        // Stop listening while speaking
+        try {
+            recognitionRef.current?.stop()
+        } catch(_e) {}
+
+        const utterance = new SpeechSynthesisUtterance(lastMessage.content)
+        utterance.onend = () => {
+          isSpeakingRef.current = false
+          // Mark as read
+          setReadMessages(prev => new Set(prev).add(lastMessage.id))
+
+          // Restart listening after speaking
+          if (isVoiceModeRef.current) {
+              try {
+                  recognitionRef.current?.start()
+              } catch(_e) {}
+          }
+        }
+        window.speechSynthesis.speak(utterance)
+      }
+    }
+
+    return () => {
+        // We do not cancel speech synthesis on unmount because we want the utterance to finish reading
+        // even if the effect re-runs, to prevent stuttering. We rely on the utterance `onend` to clean up state.
+        // If we cancel here, streaming updates or rapid re-renders will chop off the speech.
+    }
+  }, [messages, isVoiceMode, isLoading, readMessages])
+
+  // Cancel speech if voice mode is turned off
+  useEffect(() => {
+    if (!isVoiceMode) {
+        window.speechSynthesis.cancel()
+        isSpeakingRef.current = false
+    }
+  }, [isVoiceMode])
+
+  const toggleVoiceMode = () => {
+    setIsVoiceMode((prev) => {
+        if (!prev) {
+            // Turning on
+            setInput("") // Clear previous input
+        } else {
+            // Turning off
+            try {
+                recognitionRef.current?.stop()
+            } catch(_e) {}
+        }
+        return !prev
+    })
+  }
+
+  const handleSubmit = (e?: React.FormEvent) => {
+    if (e) e.preventDefault()
     if (input.trim() && !isLoading) {
       onSend(input.trim())
       setInput("")
@@ -217,18 +349,36 @@ export function ChatArea({ messages, isLoading, onSend }: ChatAreaProps) {
               onKeyDown={handleKeyDown}
               placeholder="Send a message..."
               rows={1}
-              className="w-full px-5 py-4 pr-14 rounded-2xl glass border-border/50 focus:border-primary/50 focus:ring-2 focus:ring-primary/20 resize-none transition-all text-foreground placeholder:text-muted-foreground"
+              className="w-full px-5 py-4 pr-24 rounded-2xl glass border-border/50 focus:border-primary/50 focus:ring-2 focus:ring-primary/20 resize-none transition-all text-foreground placeholder:text-muted-foreground"
               style={{ maxHeight: "200px" }}
             />
-            <motion.button
-              type="submit"
-              disabled={!input.trim() || isLoading}
-              className="absolute right-3 top-1/2 -translate-y-1/2 p-2.5 rounded-xl bg-primary text-background disabled:opacity-50 disabled:cursor-not-allowed"
-              whileHover={{ scale: 1.05 }}
-              whileTap={{ scale: 0.95 }}
-            >
-              <Send className="w-5 h-5" />
-            </motion.button>
+            <div className="absolute right-3 top-1/2 -translate-y-1/2 flex gap-2">
+              <motion.button
+                type="button"
+                onClick={toggleVoiceMode}
+                className={`p-2.5 rounded-xl transition-colors ${
+                  isVoiceMode
+                    ? isListening
+                      ? "bg-red-500 text-white animate-pulse"
+                      : "bg-primary text-background"
+                    : "bg-secondary text-muted-foreground hover:bg-secondary/80"
+                }`}
+                whileHover={{ scale: 1.05 }}
+                whileTap={{ scale: 0.95 }}
+                title="Voice Mode"
+              >
+                {isVoiceMode ? <Mic className="w-5 h-5" /> : <MicOff className="w-5 h-5" />}
+              </motion.button>
+              <motion.button
+                type="submit"
+                disabled={!input.trim() || isLoading}
+                className="p-2.5 rounded-xl bg-primary text-background disabled:opacity-50 disabled:cursor-not-allowed"
+                whileHover={{ scale: 1.05 }}
+                whileTap={{ scale: 0.95 }}
+              >
+                <Send className="w-5 h-5" />
+              </motion.button>
+            </div>
           </div>
           <p className="text-xs text-muted-foreground text-center mt-3">
             PSR AI can make mistakes. Verify important information.
