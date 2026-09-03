@@ -2,7 +2,7 @@
 
 import { motion } from "framer-motion"
 import { useState } from "react"
-import { Brain, Zap, DollarSign, Trophy, Send, Sparkles } from "lucide-react"
+import { Brain, Trophy, Send, Sparkles } from "lucide-react"
 
 const models = [
   { name: "GPT-5", color: "from-emerald-400 to-teal-500" },
@@ -49,9 +49,6 @@ export function CompareMode() {
     setResults(null)
     setWinner(null)
     
-    // Simulate API call
-    await new Promise(resolve => setTimeout(resolve, 2000))
-    
     const comparison = mockComparisons["Write a haiku about AI"]
     setResults(comparison)
     
@@ -60,9 +57,7 @@ export function CompareMode() {
       a.scores.quality > b.scores.quality ? a : b
     )
     
-    setTimeout(() => {
-      setWinner(best.model)
-    }, 1000)
+    setWinner(best.model)
     
     setIsComparing(false)
   }
