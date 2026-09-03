@@ -1,4 +1,4 @@
-import { PromptAnalysis } from "./types"
+import { PromptAnalysis } from "./types";
 
 // --------------------------------------------------
 // Fast local prompt analyzer
@@ -18,66 +18,49 @@ function makeAnalysis(
   task_type: PromptAnalysis["task_type"],
   difficulty: PromptAnalysis["difficulty"],
   options: {
-    needs_web_search?: boolean
-    needs_code_execution?: boolean
-    needs_multimodal?: boolean
-    requires_verification?: boolean
-    reasoning: string
+    needs_web_search?: boolean;
+    needs_code_execution?: boolean;
+    needs_multimodal?: boolean;
+    requires_verification?: boolean;
+    reasoning: string;
   },
 ): PromptAnalysis {
   return {
     task_type,
     difficulty,
 
-    needs_web_search:
-      options.needs_web_search ?? false,
+    needs_web_search: options.needs_web_search ?? false,
 
-    needs_code_execution:
-      options.needs_code_execution ?? false,
+    needs_code_execution: options.needs_code_execution ?? false,
 
-    needs_multimodal:
-      options.needs_multimodal ?? false,
+    needs_multimodal: options.needs_multimodal ?? false,
 
     is_ambiguous: false,
 
     ambiguity_clarifying_question: null,
 
-    requires_verification:
-      options.requires_verification ?? true,
+    requires_verification: options.requires_verification ?? true,
 
     reasoning: options.reasoning,
-  }
+  };
 }
 
 // --------------------------------------------------
 // Helpers
 // --------------------------------------------------
 
-function includesAny(
-  text: string,
-  words: string[],
-): boolean {
-  return words.some((word) =>
-    text.includes(word),
-  )
+function includesAny(text: string, words: string[]): boolean {
+  return words.some((word) => text.includes(word));
 }
 
-function looksLikeMath(prompt: string): boolean {
-  const text = prompt
-    .toLowerCase()
-    .trim()
-
+function looksLikeMath(text: string): boolean {
   // Very simple arithmetic such as:
   // 2 + 2
   // 15 * 7
   // 100 / 4
   // 25 - 9
-  if (
-    /^\s*-?\d+(?:\.\d+)?\s*[+\-*/%]\s*-?\d+(?:\.\d+)?\s*\??\s*$/.test(
-      text,
-    )
-  ) {
-    return true
+  if (/^\s*-?\d+(?:\.\d+)?\s*[+\-*/%]\s*-?\d+(?:\.\d+)?\s*\??\s*$/.test(text)) {
+    return true;
   }
 
   const mathWords = [
@@ -109,18 +92,16 @@ function looksLikeMath(prompt: string): boolean {
     "quadratic",
     "permutation",
     "combination",
-  ]
+  ];
 
-  return includesAny(text, mathWords)
+  return includesAny(text, mathWords);
 }
 
 // --------------------------------------------------
 // Multimodal detection
 // --------------------------------------------------
 
-function looksMultimodal(prompt: string): boolean {
-  const text = prompt.toLowerCase()
-
+function looksMultimodal(text: string): boolean {
   const mediaWords = [
     "image",
     "picture",
@@ -142,18 +123,16 @@ function looksMultimodal(prompt: string): boolean {
     "what is in this image",
     "analyze this image",
     "analyze the screenshot",
-  ]
+  ];
 
-  return includesAny(text, mediaWords)
+  return includesAny(text, mediaWords);
 }
 
 // --------------------------------------------------
 // Current information detection
 // --------------------------------------------------
 
-function looksCurrentInfo(prompt: string): boolean {
-  const text = prompt.toLowerCase()
-
+function looksCurrentInfo(text: string): boolean {
   const currentWords = [
     "latest",
     "recent",
@@ -196,18 +175,16 @@ function looksCurrentInfo(prompt: string): boolean {
     "results",
     "election",
     "elections",
-  ]
+  ];
 
-  return includesAny(text, currentWords)
+  return includesAny(text, currentWords);
 }
 
 // --------------------------------------------------
 // Coding detection
 // --------------------------------------------------
 
-function looksCoding(prompt: string): boolean {
-  const text = prompt.toLowerCase()
-
+function looksCoding(text: string): boolean {
   const codingWords = [
     "write code",
     "write a program",
@@ -256,18 +233,16 @@ function looksCoding(prompt: string): boolean {
     "frontend",
     "full stack",
     "full-stack",
-  ]
+  ];
 
-  return includesAny(text, codingWords)
+  return includesAny(text, codingWords);
 }
 
 // --------------------------------------------------
 // Debugging detection
 // --------------------------------------------------
 
-function looksDebugging(prompt: string): boolean {
-  const text = prompt.toLowerCase()
-
+function looksDebugging(text: string): boolean {
   const debuggingWords = [
     "debug",
     "debugging",
@@ -297,18 +272,16 @@ function looksDebugging(prompt: string): boolean {
     "compile error",
     "runtime error",
     "syntax error",
-  ]
+  ];
 
-  return includesAny(text, debuggingWords)
+  return includesAny(text, debuggingWords);
 }
 
 // --------------------------------------------------
 // Creative writing detection
 // --------------------------------------------------
 
-function looksCreative(prompt: string): boolean {
-  const text = prompt.toLowerCase()
-
+function looksCreative(text: string): boolean {
   const creativeWords = [
     "write a story",
     "write me a story",
@@ -331,18 +304,16 @@ function looksCreative(prompt: string): boolean {
     "funny story",
     "comedy sketch",
     "lyrics",
-  ]
+  ];
 
-  return includesAny(text, creativeWords)
+  return includesAny(text, creativeWords);
 }
 
 // --------------------------------------------------
 // General reasoning detection
 // --------------------------------------------------
 
-function looksReasoning(prompt: string): boolean {
-  const text = prompt.toLowerCase()
-
+function looksReasoning(text: string): boolean {
   const reasoningWords = [
     "compare",
     "comparison",
@@ -372,18 +343,16 @@ function looksReasoning(prompt: string): boolean {
     "tradeoff",
     "trade-offs",
     "explain why",
-  ]
+  ];
 
-  return includesAny(text, reasoningWords)
+  return includesAny(text, reasoningWords);
 }
 
 // --------------------------------------------------
 // Code execution detection
 // --------------------------------------------------
 
-function needsCodeExecution(prompt: string): boolean {
-  const text = prompt.toLowerCase()
-
+function needsCodeExecution(text: string): boolean {
   return includesAny(text, [
     "run this code",
     "execute this code",
@@ -395,44 +364,38 @@ function needsCodeExecution(prompt: string): boolean {
     "use python to calculate",
     "simulate this",
     "simulation",
-  ])
+  ]);
 }
 
 // --------------------------------------------------
 // Main analyzer
 // --------------------------------------------------
 
-export async function analyzePrompt(
-  prompt: string,
-): Promise<PromptAnalysis> {
-  const trimmed = prompt.trim()
+export async function analyzePrompt(prompt: string): Promise<PromptAnalysis> {
+  const trimmed = prompt.trim();
 
   if (!trimmed) {
-    throw new Error("Prompt cannot be empty")
+    throw new Error("Prompt cannot be empty");
   }
 
-  const lower = trimmed.toLowerCase()
+  const lower = trimmed.toLowerCase();
 
-  console.log(
-    "Analyzing prompt locally:",
-    trimmed,
-  )
+  // console.log(
+  //   "Analyzing prompt locally:",
+  //   trimmed,
+  // )
 
   // ------------------------------------------------
   // 1. Multimodal
   // ------------------------------------------------
 
-  if (looksMultimodal(trimmed)) {
-    return makeAnalysis(
-      "multimodal",
-      "medium",
-      {
-        needs_multimodal: true,
-        requires_verification: true,
-        reasoning:
-          "The prompt refers to an image, screenshot, diagram, chart, or other media.",
-      },
-    )
+  if (looksMultimodal(lower)) {
+    return makeAnalysis("multimodal", "medium", {
+      needs_multimodal: true,
+      requires_verification: true,
+      reasoning:
+        "The prompt refers to an image, screenshot, diagram, chart, or other media.",
+    });
   }
 
   // ------------------------------------------------
@@ -446,17 +409,13 @@ export async function analyzePrompt(
   // -> web search required
   // ------------------------------------------------
 
-  if (looksCurrentInfo(trimmed)) {
-    return makeAnalysis(
-      "current_info",
-      "medium",
-      {
-        needs_web_search: true,
-        requires_verification: true,
-        reasoning:
-          "The prompt depends on information that may have changed recently, so current web information is required.",
-      },
-    )
+  if (looksCurrentInfo(lower)) {
+    return makeAnalysis("current_info", "medium", {
+      needs_web_search: true,
+      requires_verification: true,
+      reasoning:
+        "The prompt depends on information that may have changed recently, so current web information is required.",
+    });
   }
 
   // ------------------------------------------------
@@ -468,92 +427,68 @@ export async function analyzePrompt(
   // JavaScript, etc.
   // ------------------------------------------------
 
-  if (looksDebugging(trimmed)) {
-    return makeAnalysis(
-      "debugging",
-      trimmed.length > 500
-        ? "high"
-        : "medium",
-      {
-        needs_code_execution:
-          needsCodeExecution(trimmed),
-        requires_verification: true,
-        reasoning:
-          "The prompt appears to involve diagnosing or fixing an existing implementation.",
-      },
-    )
+  if (looksDebugging(lower)) {
+    return makeAnalysis("debugging", trimmed.length > 500 ? "high" : "medium", {
+      needs_code_execution: needsCodeExecution(lower),
+      requires_verification: true,
+      reasoning:
+        "The prompt appears to involve diagnosing or fixing an existing implementation.",
+    });
   }
 
   // ------------------------------------------------
   // 4. Coding
   // ------------------------------------------------
 
-  if (looksCoding(trimmed)) {
-    return makeAnalysis(
-      "coding",
-      trimmed.length > 700
-        ? "high"
-        : "medium",
-      {
-        needs_code_execution:
-          needsCodeExecution(trimmed),
-        requires_verification: true,
-        reasoning:
-          "The prompt requires programming or software-development knowledge.",
-      },
-    )
+  if (looksCoding(lower)) {
+    return makeAnalysis("coding", trimmed.length > 700 ? "high" : "medium", {
+      needs_code_execution: needsCodeExecution(lower),
+      requires_verification: true,
+      reasoning:
+        "The prompt requires programming or software-development knowledge.",
+    });
   }
 
   // ------------------------------------------------
   // 5. Math
   // ------------------------------------------------
 
-  if (looksLikeMath(trimmed)) {
-    return makeAnalysis(
-      "math_reasoning",
-      "low",
-      {
-        requires_verification: true,
-        reasoning:
-          "The prompt contains a mathematical or numerical problem.",
-      },
-    )
+  if (looksLikeMath(lower)) {
+    return makeAnalysis("math_reasoning", "low", {
+      requires_verification: true,
+      reasoning: "The prompt contains a mathematical or numerical problem.",
+    });
   }
 
   // ------------------------------------------------
   // 6. Creative writing
   // ------------------------------------------------
 
-  if (looksCreative(trimmed)) {
+  if (looksCreative(lower)) {
     return makeAnalysis(
       "creative_writing",
-      trimmed.length > 1000
-        ? "medium"
-        : "low",
+      trimmed.length > 1000 ? "medium" : "low",
       {
         requires_verification: false,
-        reasoning:
-          "The prompt is primarily a creative-writing request.",
+        reasoning: "The prompt is primarily a creative-writing request.",
       },
-    )
+    );
   }
 
   // ------------------------------------------------
   // 7. General reasoning
   // ------------------------------------------------
 
-  if (looksReasoning(trimmed)) {
+  if (looksReasoning(lower)) {
     return makeAnalysis(
       "general_reasoning",
-      trimmed.length > 500
-        ? "high"
-        : "medium",
+      trimmed.length > 500 ? "high" : "medium",
       {
         requires_verification: true,
         reasoning:
           "The prompt requires comparison, analysis, planning, or multi-step reasoning.",
       },
-    )
+    );
   }
 
   // ------------------------------------------------
@@ -569,15 +504,11 @@ export async function analyzePrompt(
   // ------------------------------------------------
 
   if (trimmed.length > 1200) {
-    return makeAnalysis(
-      "general_reasoning",
-      "high",
-      {
-        requires_verification: true,
-        reasoning:
-          "The prompt contains substantial instructions or constraints and is therefore treated as a complex reasoning task.",
-      },
-    )
+    return makeAnalysis("general_reasoning", "high", {
+      requires_verification: true,
+      reasoning:
+        "The prompt contains substantial instructions or constraints and is therefore treated as a complex reasoning task.",
+    });
   }
 
   // ------------------------------------------------
@@ -589,13 +520,8 @@ export async function analyzePrompt(
   // keyword.
   // ------------------------------------------------
 
-  return makeAnalysis(
-    "factual_qa",
-    "low",
-    {
-      requires_verification: true,
-      reasoning:
-        "The prompt appears to be a straightforward factual question.",
-    },
-  )
+  return makeAnalysis("factual_qa", "low", {
+    requires_verification: true,
+    reasoning: "The prompt appears to be a straightforward factual question.",
+  });
 }
