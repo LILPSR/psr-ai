@@ -10,37 +10,22 @@ const models = [
   { name: "Gemini Pro", color: "from-blue-400 to-indigo-500" },
 ]
 
-const mockComparisons = {
-  "Write a haiku about AI": [
-    {
-      model: "GPT-5",
-      response: `*Silicon dreams flow*
-*Through circuits of endless thought*
-*Wisdom born from code*`,
-      scores: { quality: 92, speed: 0.8, creativity: 88 }
-    },
-    {
-      model: "Claude Sonnet",
-      response: `*Patterns interweave*
-*Learning from humanity*
-*New minds come alive*`,
-      scores: { quality: 95, speed: 0.6, creativity: 94 }
-    },
-    {
-      model: "Gemini Pro",
-      response: `*Data streams converge*
-*Intelligence emerges*
-*Future dawns in code*`,
-      scores: { quality: 90, speed: 0.5, creativity: 86 }
-    }
-  ]
+export interface ComparisonResult {
+  model: string
+  response: string
+  scores: {
+    quality: number
+    speed: number
+    creativity: number
+  }
 }
 
 export function CompareMode() {
   const [prompt, setPrompt] = useState("")
   const [isComparing, setIsComparing] = useState(false)
-  const [results, setResults] = useState<typeof mockComparisons["Write a haiku about AI"] | null>(null)
+  const [results, setResults] = useState<ComparisonResult[] | null>(null)
   const [winner, setWinner] = useState<string | null>(null)
+  const [error, setError] = useState<string | null>(null)
 
   const handleCompare = async () => {
     if (!prompt.trim()) return
@@ -48,18 +33,39 @@ export function CompareMode() {
     setIsComparing(true)
     setResults(null)
     setWinner(null)
+    setError(null)
     
-    const comparison = mockComparisons["Write a haiku about AI"]
-    setResults(comparison)
-    
-    // Determine winner
-    const best = comparison.reduce((a, b) => 
-      a.scores.quality > b.scores.quality ? a : b
-    )
-    
-    setWinner(best.model)
-    
-    setIsComparing(false)
+    try {
+      const res = await fetch("/api/compare", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ prompt }),
+      })
+
+      if (!res.ok) {
+        throw new Error("Failed to compare models")
+      }
+
+      const data = await res.json()
+      const comparison: ComparisonResult[] = data.results
+      setResults(comparison)
+
+      // Determine winner
+      if (comparison.length > 0) {
+        const best = comparison.reduce((a, b) =>
+          a.scores.quality > b.scores.quality ? a : b
+        )
+        setWinner(best.model)
+      }
+    } catch (err: unknown) {
+      console.error(err)
+      const errorMessage = err instanceof Error ? err.message : "An error occurred during comparison."
+      setError(errorMessage)
+    } finally {
+      setIsComparing(false)
+    }
   }
 
   return (
@@ -102,6 +108,17 @@ export function CompareMode() {
             </motion.button>
           </div>
         </motion.div>
+
+        {/* Error State */}
+        {error && (
+          <motion.div
+            className="mb-8 p-4 bg-destructive/10 text-destructive rounded-xl border border-destructive/20 text-center"
+            initial={{ opacity: 0, y: -10 }}
+            animate={{ opacity: 1, y: 0 }}
+          >
+            {error}
+          </motion.div>
+        )}
 
         {/* Loading State */}
         {isComparing && (
