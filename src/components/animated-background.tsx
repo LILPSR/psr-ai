@@ -75,8 +75,8 @@ export function AnimatedBackground() {
         for (let j = i + 1; j < particles.length; j++) {
           const dx = particles[i].x - particles[j].x
           const dy = particles[i].y - particles[j].y
-          const distance = Math.sqrt(dx * dx + dy * dy)
-          if (distance < 150) {
+          const distanceSq = dx * dx + dy * dy
+          if (distanceSq < 22500) {
             connections.push({ from: particles[i], to: particles[j] })
           }
         }
