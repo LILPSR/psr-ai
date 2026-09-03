@@ -33,8 +33,6 @@ export async function POST(request: NextRequest) {
 
     const analysis = await analyzePrompt(prompt || (attachment ? `Look at this ${attachment.type} I uploaded` : ""))
 
-    console.log("Prompt analysis:", analysis)
-
     // --------------------------------------------------
     // 2. HANDLE AMBIGUOUS REQUESTS
     // --------------------------------------------------
@@ -251,11 +249,6 @@ export async function POST(request: NextRequest) {
           primaryAnswer,
           secondaryAnswer,
           analysis.task_type,
-        )
-
-        console.log(
-          "Verification result:",
-          verificationResult,
         )
 
       } catch (error) {
