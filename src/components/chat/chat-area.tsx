@@ -2,8 +2,13 @@
 
 import { motion, AnimatePresence } from "framer-motion"
 import { useState, useRef, useEffect } from "react"
-import { Send, Sparkles, User, Copy, ThumbsUp, ThumbsDown, RefreshCw, Mic, MicOff } from "lucide-react"
+import { Send, Sparkles, User, Copy, ThumbsUp, ThumbsDown, RefreshCw, Paperclip, X, Image as ImageIcon, Video, Mic, MicOff } from "lucide-react"
 import ReactMarkdown from "react-markdown"
+
+export interface Attachment {
+  type: "image" | "video"
+  url: string
+}
 
 export interface Message {
   id: string
@@ -11,12 +16,13 @@ export interface Message {
   content: string
   model?: string
   timestamp: Date
+  attachment?: Attachment
 }
 
 interface ChatAreaProps {
   messages: Message[]
   isLoading: boolean
-  onSend: (message: string) => void
+  onSend: (message: string, attachment?: Attachment) => void
 }
 
 const modelColors: Record<string, string> = {
@@ -29,8 +35,10 @@ const modelColors: Record<string, string> = {
 
 export function ChatArea({ messages, isLoading, onSend }: ChatAreaProps) {
   const [input, setInput] = useState("")
+  const [attachment, setAttachment] = useState<Attachment | null>(null)
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
+  const fileInputRef = useRef<HTMLInputElement>(null)
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" })
@@ -172,16 +180,56 @@ export function ChatArea({ messages, isLoading, onSend }: ChatAreaProps) {
     })
   }
 
+  const clearAttachment = () => {
+    if (attachment?.url.startsWith("blob:")) {
+      URL.revokeObjectURL(attachment.url)
+    }
+    setAttachment(null)
+  }
+
   const handleSubmit = (e?: React.FormEvent) => {
     if (e) e.preventDefault()
-    if (input.trim() && !isLoading) {
-      onSend(input.trim())
+    if ((input.trim() || attachment) && !isLoading) {
+      onSend(input.trim(), attachment || undefined)
       setInput("")
+      setAttachment(null) // Do NOT revoke here since it needs to display in the chat history
       if (textareaRef.current) {
         textareaRef.current.style.height = "auto"
       }
     }
   }
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+
+    const type = file.type.startsWith("video/") ? "video" : "image"
+
+    if (attachment?.url.startsWith("blob:")) {
+      URL.revokeObjectURL(attachment.url)
+    }
+
+    const objectUrl = URL.createObjectURL(file)
+    setAttachment({
+      type,
+      url: objectUrl,
+    })
+
+    // Reset file input
+    if (fileInputRef.current) {
+      fileInputRef.current.value = ""
+    }
+  }
+
+  useEffect(() => {
+    // Cleanup any lingering attachment preview on unmount if it wasn't sent
+    return () => {
+      if (attachment?.url.startsWith("blob:")) {
+        URL.revokeObjectURL(attachment.url)
+      }
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === "Enter" && !e.shiftKey) {
@@ -268,12 +316,29 @@ export function ChatArea({ messages, isLoading, onSend }: ChatAreaProps) {
                         : "glass"
                     }`}
                   >
+                    {message.attachment && (
+                      <div className="mb-3">
+                        {message.attachment.type === "image" ? (
+                          <img
+                            src={message.attachment.url}
+                            alt="Attachment"
+                            className="max-h-60 rounded-xl object-contain bg-secondary/20"
+                          />
+                        ) : (
+                          <video
+                            src={message.attachment.url}
+                            controls
+                            className="max-h-60 rounded-xl bg-secondary/20"
+                          />
+                        )}
+                      </div>
+                    )}
                     {message.role === "assistant" ? (
                       <div className="prose prose-invert prose-sm max-w-none">
                         <ReactMarkdown>{message.content}</ReactMarkdown>
                       </div>
                     ) : (
-                      <p className="text-sm">{message.content}</p>
+                      <p className="text-sm whitespace-pre-wrap">{message.content}</p>
                     )}
                   </div>
                   
@@ -341,45 +406,81 @@ export function ChatArea({ messages, isLoading, onSend }: ChatAreaProps) {
       {/* Input Area */}
       <div className="border-t border-border/50 p-4 bg-background/50 backdrop-blur-xl">
         <form onSubmit={handleSubmit} className="max-w-3xl mx-auto">
-          <div className="relative">
-            <textarea
-              ref={textareaRef}
-              value={input}
-              onChange={handleTextareaChange}
-              onKeyDown={handleKeyDown}
-              placeholder="Send a message..."
-              rows={1}
-              className="w-full px-5 py-4 pr-24 rounded-2xl glass border-border/50 focus:border-primary/50 focus:ring-2 focus:ring-primary/20 resize-none transition-all text-foreground placeholder:text-muted-foreground"
-              style={{ maxHeight: "200px" }}
-            />
-            <div className="absolute right-3 top-1/2 -translate-y-1/2 flex gap-2">
-              <motion.button
+          {/* Attachment Preview */}
+          {attachment && (
+            <div className="mb-4 relative inline-block">
+              {attachment.type === "image" ? (
+                <img src={attachment.url} alt="Attachment" className="max-h-32 rounded-xl object-contain bg-secondary/50" />
+              ) : (
+                <video src={attachment.url} className="max-h-32 rounded-xl bg-secondary/50" controls />
+              )}
+              <button
                 type="button"
-                onClick={toggleVoiceMode}
-                className={`p-2.5 rounded-xl transition-colors ${
-                  isVoiceMode
-                    ? isListening
-                      ? "bg-red-500 text-white animate-pulse"
-                      : "bg-primary text-background"
-                    : "bg-secondary text-muted-foreground hover:bg-secondary/80"
-                }`}
-                whileHover={{ scale: 1.05 }}
-                whileTap={{ scale: 0.95 }}
-                title="Voice Mode"
+                onClick={clearAttachment}
+                className="absolute -top-2 -right-2 p-1 rounded-full bg-background border border-border/50 text-muted-foreground hover:text-foreground transition-colors"
               >
-                {isVoiceMode ? <Mic className="w-5 h-5" /> : <MicOff className="w-5 h-5" />}
-              </motion.button>
-              <motion.button
-                type="submit"
-                disabled={!input.trim() || isLoading}
-                className="p-2.5 rounded-xl bg-primary text-background disabled:opacity-50 disabled:cursor-not-allowed"
-                whileHover={{ scale: 1.05 }}
-                whileTap={{ scale: 0.95 }}
-              >
-                <Send className="w-5 h-5" />
-              </motion.button>
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+          )}
+
+          <div className="relative flex items-end gap-2">
+            <input
+              type="file"
+              ref={fileInputRef}
+              onChange={handleFileChange}
+              accept="image/*,video/*"
+              className="hidden"
+            />
+            <button
+              type="button"
+              onClick={() => fileInputRef.current?.click()}
+              className="p-3 mb-1 rounded-xl glass border-border/50 hover:bg-secondary/50 transition-colors text-muted-foreground"
+              title="Attach image or video"
+            >
+              <Paperclip className="w-5 h-5" />
+            </button>
+            <div className="relative flex-1">
+              <textarea
+                ref={textareaRef}
+                value={input}
+                onChange={handleTextareaChange}
+                onKeyDown={handleKeyDown}
+                placeholder="Send a message..."
+                rows={1}
+                className="w-full px-5 py-4 pr-24 rounded-2xl glass border-border/50 focus:border-primary/50 focus:ring-2 focus:ring-primary/20 resize-none transition-all text-foreground placeholder:text-muted-foreground"
+                style={{ maxHeight: "200px" }}
+              />
+              <div className="absolute right-3 top-1/2 -translate-y-1/2 flex gap-2">
+                <motion.button
+                  type="button"
+                  onClick={toggleVoiceMode}
+                  className={`p-2.5 rounded-xl transition-colors ${
+                    isVoiceMode
+                      ? isListening
+                        ? "bg-red-500 text-white animate-pulse"
+                        : "bg-primary text-background"
+                      : "bg-secondary text-muted-foreground hover:bg-secondary/80"
+                  }`}
+                  whileHover={{ scale: 1.05 }}
+                  whileTap={{ scale: 0.95 }}
+                  title="Voice Mode"
+                >
+                  {isVoiceMode ? <Mic className="w-5 h-5" /> : <MicOff className="w-5 h-5" />}
+                </motion.button>
+                <motion.button
+                  type="submit"
+                  disabled={(!input.trim() && !attachment) || isLoading}
+                  className="p-2.5 rounded-xl bg-primary text-background disabled:opacity-50 disabled:cursor-not-allowed"
+                  whileHover={{ scale: 1.05 }}
+                  whileTap={{ scale: 0.95 }}
+                >
+                  <Send className="w-5 h-5" />
+                </motion.button>
+              </div>
             </div>
           </div>
+
           <p className="text-xs text-muted-foreground text-center mt-3">
             PSR AI can make mistakes. Verify important information.
           </p>

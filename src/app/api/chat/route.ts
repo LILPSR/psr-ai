@@ -9,17 +9,19 @@ import {
   ChatResponse,
   Confidence,
   VerificationResult,
+  Attachment,
 } from "@/lib/ai/types"
 
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
     const prompt = body?.prompt
+    const attachment = body?.attachment
 
-    if (typeof prompt !== "string" || !prompt.trim()) {
+    if ((typeof prompt !== "string" || !prompt.trim()) && !attachment) {
       return NextResponse.json(
         {
-          error: "A valid prompt is required.",
+          error: "A valid prompt or attachment is required.",
         },
         { status: 400 },
       )
@@ -29,7 +31,7 @@ export async function POST(request: NextRequest) {
     // 1. ANALYZE PROMPT
     // --------------------------------------------------
 
-    const analysis = await analyzePrompt(prompt)
+    const analysis = await analyzePrompt(prompt || (attachment ? `Look at this ${attachment.type} I uploaded` : ""))
 
     console.log("Prompt analysis:", analysis)
 
@@ -130,12 +132,15 @@ export async function POST(request: NextRequest) {
     let primaryAnswer = ""
     let toolsUsed: string[] = []
 
+    const finalPrompt = prompt || (attachment ? `Look at this ${attachment.type} I uploaded` : "")
+
     try {
       const primary = await callModel(
         primaryProvider,
-        prompt,
+        finalPrompt,
         primaryModel,
         analysis.needs_web_search,
+        attachment
       )
 
       primaryAnswer = primary.text
@@ -165,9 +170,10 @@ export async function POST(request: NextRequest) {
 
         const fallback = await callModel(
           decision.secondary_provider,
-          prompt,
+          finalPrompt,
           decision.secondary_model,
           false,
+          attachment
         )
 
         primaryAnswer = fallback.text
@@ -216,9 +222,10 @@ export async function POST(request: NextRequest) {
         try {
           const secondary = await callModel(
             decision.secondary_provider,
-            prompt,
+            finalPrompt,
             decision.secondary_model,
             false,
+            attachment
           )
 
           secondaryAnswer = secondary.text
