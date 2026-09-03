@@ -1,5 +1,5 @@
 import { GoogleGenAI } from "@google/genai"
-import { Provider } from "./types"
+import { Provider, Attachment } from "./types"
 
 const geminiKey = process.env.GEMINI_API_KEY
 const groqKey = process.env.GROQ_API_KEY
@@ -20,6 +20,7 @@ async function callGemini(
   prompt: string,
   model = "gemini-3.6-flash",
   useWebSearch = false,
+  attachment?: Attachment
 ): Promise<ModelResponse> {
   if (!gemini) {
     throw new Error("GEMINI_API_KEY is not configured")
@@ -42,9 +43,22 @@ async function callGemini(
     ]
   }
 
+  const contents: any[] = [prompt]
+
+  if (attachment) {
+    const base64Data = attachment.url.split(",")[1]
+    const mimeType = attachment.type === "video" ? "video/mp4" : "image/jpeg"
+    contents.push({
+      inlineData: {
+        data: base64Data,
+        mimeType: mimeType,
+      },
+    })
+  }
+
   const response = await gemini.models.generateContent({
     model,
-    contents: prompt,
+    contents: contents,
     config,
   })
 
@@ -61,6 +75,7 @@ async function callGemini(
 async function callGroq(
   prompt: string,
   model = "openai/gpt-oss-20b",
+  attachment?: Attachment
 ): Promise<ModelResponse> {
   if (!groqKey) {
     throw new Error("GROQ_API_KEY is not configured")
@@ -82,7 +97,10 @@ async function callGroq(
         messages: [
           {
             role: "user",
-            content: prompt,
+            content: attachment ? [
+              { type: "text", text: prompt },
+              { type: "image_url", image_url: { url: attachment.url } }
+            ] : prompt,
           },
         ],
 
@@ -120,6 +138,7 @@ async function callGroq(
 async function callOpenRouter(
   prompt: string,
   model = "openrouter/free",
+  attachment?: Attachment
 ): Promise<ModelResponse> {
   if (!openRouterKey) {
     throw new Error(
@@ -147,7 +166,10 @@ async function callOpenRouter(
         messages: [
           {
             role: "user",
-            content: prompt,
+            content: attachment ? [
+              { type: "text", text: prompt },
+              { type: "image_url", image_url: { url: attachment.url } }
+            ] : prompt,
           },
         ],
 
@@ -191,6 +213,7 @@ export async function callModel(
   prompt: string,
   model?: string,
   useWebSearch = false,
+  attachment?: Attachment,
 ): Promise<ModelResponse> {
   switch (provider) {
     case "gemini":
@@ -198,18 +221,21 @@ export async function callModel(
         prompt,
         model,
         useWebSearch,
+        attachment
       )
 
     case "groq":
       return callGroq(
         prompt,
         model,
+        attachment
       )
 
     case "openrouter":
       return callOpenRouter(
         prompt,
         model,
+        attachment
       )
 
     default:
