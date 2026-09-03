@@ -58,6 +58,11 @@ export interface VerificationSignal {
   detail: string
 }
 
+export interface Attachment {
+  type: "image" | "video"
+  url: string
+}
+
 export interface VerificationResult {
   signals: VerificationSignal[]
   passed: boolean

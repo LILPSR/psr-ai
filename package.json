@@ -59,6 +59,10 @@
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",
+    "@testing-library/dom": "^10.4.1",
+    "@testing-library/jest-dom": "^7.0.1",
+    "@testing-library/react": "^16.3.3",
+    "@types/jest": "^30.0.0",
     "@types/node": "^20",
     "@types/react": "^19",
     "@types/react-dom": "^19",
@@ -66,7 +70,10 @@
     "babel-plugin-react-compiler": "1.0.0",
     "eslint": "^9",
     "eslint-config-next": "16.3.2",
+    "jest": "^30.5.1",
+    "jsdom": "^29.1.1",
     "tailwindcss": "^4",
+    "ts-jest": "^29.4.12",
     "typescript": "^5",
     "vite": "^5.4.21",
     "vitest": "^2.1.9"
