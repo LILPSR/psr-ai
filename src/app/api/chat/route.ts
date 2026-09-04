@@ -17,6 +17,7 @@ export async function POST(request: NextRequest) {
     const body = await request.json()
     const prompt = body?.prompt
     const attachment = body?.attachment
+    const history = body?.history
 
     if ((typeof prompt !== "string" || !prompt.trim()) && !attachment) {
       return NextResponse.json(
@@ -138,7 +139,8 @@ export async function POST(request: NextRequest) {
         finalPrompt,
         primaryModel,
         analysis.needs_web_search,
-        attachment
+        attachment,
+        history
       )
 
       primaryAnswer = primary.text
@@ -171,7 +173,8 @@ export async function POST(request: NextRequest) {
           finalPrompt,
           decision.secondary_model,
           false,
-          attachment
+          attachment,
+          history
         )
 
         primaryAnswer = fallback.text
@@ -223,7 +226,8 @@ export async function POST(request: NextRequest) {
             finalPrompt,
             decision.secondary_model,
             false,
-            attachment
+            attachment,
+            history
           )
 
           secondaryAnswer = secondary.text
