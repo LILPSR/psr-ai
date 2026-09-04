@@ -13,21 +13,6 @@ import {
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 
-interface ChatHistory {
-  id: string
-  title: string
-  timestamp: string
-  model: string
-}
-
-const mockHistory: ChatHistory[] = [
-  { id: "1", title: "Python optimization help", timestamp: "2 min ago", model: "DeepSeek" },
-  { id: "2", title: "Creative story writing", timestamp: "1 hour ago", model: "Claude Sonnet" },
-  { id: "3", title: "Data analysis query", timestamp: "3 hours ago", model: "GPT-5" },
-  { id: "4", title: "React component design", timestamp: "Yesterday", model: "Claude Sonnet" },
-  { id: "5", title: "Research summary", timestamp: "Yesterday", model: "Gemini Pro" },
-]
-
 interface SidebarProps {
   isCollapsed: boolean
   onToggle: () => void
@@ -110,41 +95,8 @@ export function Sidebar({ isCollapsed, onToggle, activeTab, onTabChange, onNewCh
         ))}
       </div>
 
-      {/* Chat History */}
-      {!isCollapsed && activeTab === "chat" && (
-        <motion.div
-          className="flex-1 overflow-y-auto px-3 py-4 space-y-2"
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          transition={{ delay: 0.1 }}
-        >
-          <span className="px-4 text-xs font-medium text-muted-foreground uppercase tracking-wider">
-            Recent Chats
-          </span>
-          {mockHistory.map((chat, index) => (
-            <motion.div
-              key={chat.id}
-              className="group flex items-center gap-3 px-4 py-3 rounded-xl hover:bg-secondary/50 cursor-pointer transition-all"
-              initial={{ opacity: 0, x: -20 }}
-              animate={{ opacity: 1, x: 0 }}
-              transition={{ delay: index * 0.05 }}
-            >
-              <MessageSquare className="w-4 h-4 text-muted-foreground shrink-0" />
-              <div className="flex-1 min-w-0">
-                <p className="text-sm font-medium text-foreground truncate">{chat.title}</p>
-                <div className="flex items-center gap-2 mt-0.5">
-                  <span className="text-xs text-muted-foreground">{chat.timestamp}</span>
-                  <span className="w-1 h-1 rounded-full bg-muted-foreground/50" />
-                  <span className="text-xs text-primary">{chat.model}</span>
-                </div>
-              </div>
-              <button className="opacity-0 group-hover:opacity-100 p-1 hover:bg-destructive/20 rounded transition-all">
-                <Trash2 className="w-3.5 h-3.5 text-destructive" />
-              </button>
-            </motion.div>
-          ))}
-        </motion.div>
-      )}
+      {/* Fill flex space so user section stays at bottom */}
+      <div className="flex-1" />
 
       {/* Bottom User Section */}
       <div className="mt-auto p-3 border-t border-border/50">
