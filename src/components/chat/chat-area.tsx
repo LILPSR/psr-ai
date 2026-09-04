@@ -81,6 +81,7 @@ export function ChatArea({ messages, isLoading, onSend }: ChatAreaProps) {
     setAttachment({
       type,
       url: objectUrl,
+      file,
     })
 
     // Reset file input

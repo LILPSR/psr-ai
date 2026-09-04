@@ -14,12 +14,54 @@ import {
 
 export async function POST(request: NextRequest) {
   try {
-    const body = await request.json()
-    const prompt = body?.prompt
-    const attachment = body?.attachment
-    const history = body?.history
+    let prompt = ""
+    let attachment: Attachment | undefined = undefined
+    let history: { role: string; content: string }[] | undefined = undefined
 
-    if ((typeof prompt !== "string" || !prompt.trim()) && !attachment) {
+    const contentType = request.headers.get("content-type") || ""
+
+    if (contentType.includes("multipart/form-data")) {
+      const formData = await request.formData()
+      prompt = (formData.get("prompt") as string) || ""
+
+      const historyStr = formData.get("history") as string
+      if (historyStr) {
+        try {
+          history = JSON.parse(historyStr)
+        } catch (e) {
+          // ignore
+        }
+      }
+
+      const file = formData.get("attachment") as File | null
+      const attachmentMeta = formData.get("attachment_meta") as string | null
+
+      if (file && file.size > 0) {
+        const bytes = await file.arrayBuffer()
+        const buffer = Buffer.from(bytes)
+        const base64String = buffer.toString("base64")
+        const mimeType = file.type || "image/jpeg"
+        const type = mimeType.startsWith("video/") ? "video" : "image"
+
+        attachment = {
+          type,
+          url: `data:${mimeType};base64,${base64String}`,
+        }
+      } else if (attachmentMeta) {
+        try {
+          attachment = JSON.parse(attachmentMeta)
+        } catch (e) {
+          // ignore
+        }
+      }
+    } else {
+      const body = await request.json()
+      prompt = body?.prompt || ""
+      attachment = body?.attachment
+      history = body?.history
+    }
+
+    if ((!prompt || !prompt.trim()) && !attachment) {
       return NextResponse.json(
         {
           error: "A valid prompt or attachment is required.",

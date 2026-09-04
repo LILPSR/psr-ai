@@ -184,16 +184,18 @@ export default function ChatPage() {
         content: m.content
       }))
 
+      const formData = new FormData()
+      formData.append("prompt", content)
+      formData.append("history", JSON.stringify(historyPayload))
+      if (attachment?.file) {
+        formData.append("attachment", attachment.file)
+      } else if (attachment) {
+        formData.append("attachment_meta", JSON.stringify(attachment))
+      }
+
       const response = await fetch("/api/chat", {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          prompt: content,
-          attachment: attachment,
-          history: historyPayload
-        }),
+        body: formData,
       })
 
       if (!response.ok) {

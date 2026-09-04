@@ -61,6 +61,7 @@ export interface VerificationSignal {
 export interface Attachment {
   type: "image" | "video"
   url: string
+  file?: File
 }
 
 export interface VerificationResult {
