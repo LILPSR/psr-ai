@@ -20,7 +20,8 @@ async function callGemini(
   prompt: string,
   model = "gemini-3.6-flash",
   useWebSearch = false,
-  attachment?: Attachment
+  attachment?: Attachment,
+  history?: { role: string; content: string }[]
 ): Promise<ModelResponse> {
   if (!gemini) {
     throw new Error("GEMINI_API_KEY is not configured")
@@ -43,18 +44,36 @@ async function callGemini(
     ]
   }
 
-  const contents: any[] = [prompt]
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const contents: any[] = []
+
+  if (history && history.length > 0) {
+    for (const msg of history) {
+      contents.push({
+        role: msg.role === "user" ? "user" : "model",
+        parts: [{ text: msg.content }]
+      })
+    }
+  }
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const promptParts: any[] = [{ text: prompt }]
 
   if (attachment) {
     const base64Data = attachment.url.split(",")[1]
     const mimeType = attachment.type === "video" ? "video/mp4" : "image/jpeg"
-    contents.push({
+    promptParts.push({
       inlineData: {
         data: base64Data,
         mimeType: mimeType,
       },
     })
   }
+
+  contents.push({
+    role: "user",
+    parts: promptParts
+  })
 
   const response = await gemini.models.generateContent({
     model,
@@ -75,7 +94,8 @@ async function callGemini(
 async function callGroq(
   prompt: string,
   model = "openai/gpt-oss-20b",
-  attachment?: Attachment
+  attachment?: Attachment,
+  history?: { role: string; content: string }[]
 ): Promise<ModelResponse> {
   if (!groqKey) {
     throw new Error("GROQ_API_KEY is not configured")
@@ -95,6 +115,7 @@ async function callGroq(
         model,
 
         messages: [
+          ...(history || []).map(m => ({ role: m.role, content: m.content })),
           {
             role: "user",
             content: attachment ? [
@@ -138,7 +159,8 @@ async function callGroq(
 async function callOpenRouter(
   prompt: string,
   model = "openrouter/free",
-  attachment?: Attachment
+  attachment?: Attachment,
+  history?: { role: string; content: string }[]
 ): Promise<ModelResponse> {
   if (!openRouterKey) {
     throw new Error(
@@ -164,6 +186,7 @@ async function callOpenRouter(
         model,
 
         messages: [
+          ...(history || []).map(m => ({ role: m.role, content: m.content })),
           {
             role: "user",
             content: attachment ? [
@@ -214,6 +237,7 @@ export async function callModel(
   model?: string,
   useWebSearch = false,
   attachment?: Attachment,
+  history?: { role: string; content: string }[]
 ): Promise<ModelResponse> {
   switch (provider) {
     case "gemini":
@@ -221,21 +245,24 @@ export async function callModel(
         prompt,
         model,
         useWebSearch,
-        attachment
+        attachment,
+        history
       )
 
     case "groq":
       return callGroq(
         prompt,
         model,
-        attachment
+        attachment,
+        history
       )
 
     case "openrouter":
       return callOpenRouter(
         prompt,
         model,
-        attachment
+        attachment,
+        history
       )
 
     default:

@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useCallback } from "react"
+import { useState, useCallback, useEffect } from "react"
 import { motion, AnimatePresence } from "framer-motion"
 import { Sidebar } from "@/components/chat/sidebar"
 import { Navbar } from "@/components/chat/navbar"
@@ -15,6 +15,12 @@ import { CommandPalette } from "@/components/command-palette"
 import { ModelDisplayPanel } from "@/components/model-display-panel"
 import { Menu, X } from "lucide-react"
 
+export interface Topic {
+  id: string
+  name: string
+  messages: Message[]
+}
+
 export default function ChatPage() {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
@@ -23,7 +29,26 @@ export default function ChatPage() {
     "chat" | "analytics" | "compare" | "settings"
   >("chat")
 
+  const [topics, setTopics] = useState<Topic[]>([])
+  const [activeTopicId, setActiveTopicId] = useState<string | null>(null)
+
   const [messages, setMessages] = useState<Message[]>([])
+
+  useEffect(() => {
+    try {
+      const stored = localStorage.getItem("psr_ai_topics")
+      if (stored) {
+        setTopics(JSON.parse(stored))
+      }
+    } catch (e) {
+      console.error("Failed to parse stored topics", e)
+    }
+  }, [])
+
+  const saveTopics = (newTopics: Topic[]) => {
+    setTopics(newTopics)
+    localStorage.setItem("psr_ai_topics", JSON.stringify(newTopics))
+  }
   const [isLoading, setIsLoading] = useState(false)
 
   const [routingStatus, setRoutingStatus] = useState<
@@ -70,8 +95,6 @@ export default function ChatPage() {
       attachment,
     }
 
-    setMessages((prev) => [...prev, userMessage])
-
     setIsLoading(true)
     setIsRouting(true)
     setRoutingStatus("analyzing")
@@ -103,8 +126,63 @@ export default function ChatPage() {
 
     try {
       // --------------------------------------------------------
+      // Determine Topic
+      // --------------------------------------------------------
+      const topicRes = await fetch("/api/topic", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          prompt: content,
+          activeTopicId: activeTopicId,
+          topics: topics,
+        }),
+      })
+
+      const topicData = await topicRes.json()
+
+      let nextActiveId = activeTopicId
+      let nextMessages = [...messages]
+      let nextTopics = [...topics]
+
+      if (topicData.action === "switch" && topicData.topicId) {
+        const targetTopic = nextTopics.find(t => t.id === topicData.topicId)
+        if (targetTopic) {
+          nextActiveId = targetTopic.id
+          nextMessages = [...targetTopic.messages]
+        }
+      } else if (topicData.action === "new" && topicData.name) {
+        const newId = Date.now().toString()
+        nextActiveId = newId
+        nextMessages = []
+        const newTopic = { id: newId, name: topicData.name, messages: [] }
+        nextTopics = [newTopic, ...nextTopics]
+      }
+
+      if (!nextActiveId) {
+        const newId = Date.now().toString()
+        nextActiveId = newId
+        nextMessages = []
+        const newTopic = { id: newId, name: topicData?.name || "General Chat", messages: [] }
+        nextTopics = [newTopic, ...nextTopics]
+      }
+
+      nextMessages = [...nextMessages, userMessage]
+
+      setActiveTopicId(nextActiveId)
+      setMessages(nextMessages)
+
+      nextTopics = nextTopics.map(t => t.id === nextActiveId ? { ...t, messages: nextMessages } : t)
+      saveTopics(nextTopics)
+
+      // --------------------------------------------------------
       // Call the REAL backend
       // --------------------------------------------------------
+
+      // Filter out the current message and pass history
+      const historyPayload = nextMessages.slice(0, -1).map(m => ({
+        role: m.role,
+        content: m.content
+      }))
 
       const response = await fetch("/api/chat", {
         method: "POST",
@@ -114,6 +192,7 @@ export default function ChatPage() {
         body: JSON.stringify({
           prompt: content,
           attachment: attachment,
+          history: historyPayload
         }),
       })
 
@@ -182,7 +261,18 @@ export default function ChatPage() {
         timestamp: new Date(),
       }
 
-      setMessages((prev) => [...prev, assistantMessage])
+      setMessages((prev) => {
+        const updated = [...prev, assistantMessage]
+        // Sync to topic storage
+        setTopics(currentTopics => {
+          const syncedTopics = currentTopics.map(t =>
+            t.id === nextActiveId ? { ...t, messages: updated } : t
+          )
+          localStorage.setItem("psr_ai_topics", JSON.stringify(syncedTopics))
+          return syncedTopics
+        })
+        return updated
+      })
     } catch (error) {
       console.error("PSR AI request failed:", error)
 
@@ -213,6 +303,7 @@ export default function ChatPage() {
 
   const handleNewChat = () => {
     setMessages([])
+    setActiveTopicId(null)
     setSelectedModel(null)
     setRoutingStatus("idle")
     setIsRouting(false)
