@@ -68,7 +68,7 @@ async function callGroq(
     throw new Error("GROQ_API_KEY is not configured")
   }
 
-  const messagesContent: any[] = []
+  const messagesContent: { type: string; text?: string; image_url?: { url: string }; video_url?: { url: string }; file_url?: { url: string } }[] = []
   if (files && files.length > 0) {
     files.forEach((f) => {
       // NOTE: Groq currently mostly supports images natively using this format depending on the model.
@@ -143,7 +143,7 @@ async function callOpenRouter(
     )
   }
 
-  const messagesContent: any[] = []
+  const messagesContent: { type: string; text?: string; image_url?: { url: string }; video_url?: { url: string }; file_url?: { url: string } }[] = []
   if (files && files.length > 0) {
     files.forEach((f) => {
       // NOTE: OpenRouter expects image_url format for multimodality

@@ -71,8 +71,8 @@ export default function ChatPage() {
         name: file.name,
         type: isImage ? "image" : isVideo ? "video" : "file",
         url: URL.createObjectURL(file)
-      };
-    }) as any[];
+          };
+    }) as { id: string; name: string; type: "image" | "video" | "file"; url: string }[];
 
     const userMessage: Message = {
       id: Date.now().toString(),
