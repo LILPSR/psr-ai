@@ -404,11 +404,24 @@ function needsCodeExecution(prompt: string): boolean {
 
 export async function analyzePrompt(
   prompt: string,
+  hasFiles: boolean = false
 ): Promise<PromptAnalysis> {
   const trimmed = prompt.trim()
 
-  if (!trimmed) {
+  if (!trimmed && !hasFiles) {
     throw new Error("Prompt cannot be empty")
+  }
+
+  if (hasFiles) {
+    return makeAnalysis(
+      "multimodal",
+      "medium",
+      {
+        needs_multimodal: true,
+        requires_verification: true,
+        reasoning: "The prompt contains a file attachment, making it a multimodal task.",
+      },
+    )
   }
 
   const lower = trimmed.toLowerCase()

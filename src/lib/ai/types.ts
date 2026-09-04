@@ -18,6 +18,13 @@ export type Provider =
 
 export type Confidence = "low" | "medium" | "high"
 
+export interface FileData {
+  inlineData: {
+    data: string;
+    mimeType: string;
+  };
+}
+
 export interface PromptAnalysis {
   task_type: TaskType
   difficulty: Difficulty

@@ -61,11 +61,24 @@ export default function ChatPage() {
   // REAL AI ROUTER
   // ============================================================
 
-  const handleSend = useCallback(async (content: string) => {
+  const handleSend = useCallback(async (content: string, files: File[] = []) => {
+    // Basic setup for attachment display
+    const attachments = files.map(file => {
+      const isImage = file.type.startsWith("image/");
+      const isVideo = file.type.startsWith("video/");
+      return {
+        id: file.name,
+        name: file.name,
+        type: isImage ? "image" : isVideo ? "video" : "file",
+        url: URL.createObjectURL(file)
+      };
+    }) as any[];
+
     const userMessage: Message = {
       id: Date.now().toString(),
       role: "user",
       content,
+      attachments,
       timestamp: new Date(),
     }
 
@@ -105,14 +118,15 @@ export default function ChatPage() {
       // Call the REAL backend
       // --------------------------------------------------------
 
+      const formData = new FormData()
+      formData.append("prompt", content)
+      files.forEach((file) => {
+        formData.append("files", file)
+      })
+
       const response = await fetch("/api/chat", {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          prompt: content,
-        }),
+        body: formData,
       })
 
       if (!response.ok) {

@@ -13,23 +13,48 @@ import {
 
 export async function POST(request: NextRequest) {
   try {
-    const body = await request.json()
-    const prompt = body?.prompt
+    const isFormData = request.headers.get("content-type")?.includes("multipart/form-data")
 
-    if (typeof prompt !== "string" || !prompt.trim()) {
+    let prompt = ""
+    let files: File[] = []
+
+    if (isFormData) {
+      const formData = await request.formData()
+      prompt = formData.get("prompt") as string || ""
+      files = formData.getAll("files") as File[]
+    } else {
+      const body = await request.json()
+      prompt = body?.prompt || ""
+    }
+
+    if (typeof prompt !== "string" || (!prompt.trim() && files.length === 0)) {
       return NextResponse.json(
         {
-          error: "A valid prompt is required.",
+          error: "A valid prompt or file is required.",
         },
         { status: 400 },
       )
     }
 
+    // Convert files to base64 for AI providers
+    const fileDataObjects = await Promise.all(
+      files.map(async (file) => {
+        const bytes = await file.arrayBuffer()
+        const buffer = Buffer.from(bytes)
+        return {
+          inlineData: {
+            data: buffer.toString("base64"),
+            mimeType: file.type,
+          },
+        }
+      })
+    )
+
     // --------------------------------------------------
     // 1. ANALYZE PROMPT
     // --------------------------------------------------
 
-    const analysis = await analyzePrompt(prompt)
+    const analysis = await analyzePrompt(prompt, files.length > 0)
 
     console.log("Prompt analysis:", analysis)
 
@@ -136,6 +161,7 @@ export async function POST(request: NextRequest) {
         prompt,
         primaryModel,
         analysis.needs_web_search,
+        fileDataObjects
       )
 
       primaryAnswer = primary.text
@@ -168,6 +194,7 @@ export async function POST(request: NextRequest) {
           prompt,
           decision.secondary_model,
           false,
+          fileDataObjects
         )
 
         primaryAnswer = fallback.text
@@ -219,6 +246,7 @@ export async function POST(request: NextRequest) {
             prompt,
             decision.secondary_model,
             false,
+            fileDataObjects
           )
 
           secondaryAnswer = secondary.text
