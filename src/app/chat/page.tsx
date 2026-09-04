@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useCallback } from "react"
+import { useState, useCallback, useEffect } from "react"
 import { motion, AnimatePresence } from "framer-motion"
 import { Sidebar } from "@/components/chat/sidebar"
 import { Navbar } from "@/components/chat/navbar"
@@ -23,7 +23,41 @@ export default function ChatPage() {
     "chat" | "analytics" | "compare" | "settings"
   >("chat")
 
-  const [messages, setMessages] = useState<Message[]>([])
+  type Conversation = {
+    id: string
+    topic: string
+    messages: Message[]
+  }
+
+  const [conversations, setConversations] = useState<Conversation[]>([])
+  const [activeConversationId, setActiveConversationId] = useState<string | null>(null)
+
+  // Derive messages from active conversation
+  const activeConversation = conversations.find((c) => c.id === activeConversationId)
+  const messages = activeConversation?.messages || []
+
+  // Load from localStorage on mount
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem("psr_ai_conversations")
+      if (saved) {
+        setConversations(JSON.parse(saved))
+      }
+    } catch (e) {
+      console.error("Failed to load conversations:", e)
+    }
+  }, [])
+
+  // Save to localStorage whenever conversations change
+  useEffect(() => {
+    try {
+      if (conversations.length > 0) {
+        localStorage.setItem("psr_ai_conversations", JSON.stringify(conversations))
+      }
+    } catch (e) {
+      console.error("Failed to save conversations:", e)
+    }
+  }, [conversations])
   const [isLoading, setIsLoading] = useState(false)
 
   const [routingStatus, setRoutingStatus] = useState<
@@ -70,8 +104,6 @@ export default function ChatPage() {
       attachment,
     }
 
-    setMessages((prev) => [...prev, userMessage])
-
     setIsLoading(true)
     setIsRouting(true)
     setRoutingStatus("analyzing")
@@ -81,7 +113,7 @@ export default function ChatPage() {
     setRoutingSteps([
       {
         id: "1",
-        label: "Analyzing prompt...",
+        label: "Analyzing topic...",
         status: "active",
       },
       {
@@ -102,9 +134,70 @@ export default function ChatPage() {
     ])
 
     try {
+      // 1. Topic Matching
+      const topicRes = await fetch("/api/topic", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          prompt: content,
+          topics: conversations.map(c => ({ id: c.id, topic: c.topic }))
+        })
+      })
+
+      const topicData = await topicRes.json()
+
+      let targetConversationId = activeConversationId
+
+      if (topicData.match) {
+        targetConversationId = topicData.match
+      } else if (topicData.topicName) {
+        const newId = Date.now().toString()
+        targetConversationId = newId
+        setConversations(prev => [...prev, { id: newId, topic: topicData.topicName, messages: [] }])
+      } else if (!targetConversationId) {
+         // Fallback if the AI fails
+         const newId = Date.now().toString()
+         targetConversationId = newId
+         setConversations(prev => [...prev, { id: newId, topic: "New Conversation", messages: [] }])
+      }
+
+      setActiveConversationId(targetConversationId)
+
+      // Helper to add messages safely by target ID since state updates might be queued
+      const addMessageToTarget = (msg: Message, targetId: string) => {
+        setConversations((prev) => {
+          const active = prev.find((c) => c.id === targetId)
+          if (active) {
+            return prev.map((c) => (c.id === targetId ? { ...c, messages: [...c.messages, msg] } : c))
+          }
+          // if not found (shouldn't happen due to above logic), add it
+           return [...prev, { id: targetId, topic: "New Conversation", messages: [msg] }]
+        })
+      }
+
+      addMessageToTarget(userMessage, targetConversationId as string)
+
+      // Build history for the chat API
+      // Since we just dispatched a state update for userMessage, we construct the history array manually here
+      const targetConv = conversations.find(c => c.id === targetConversationId)
+      const messageHistory = targetConv ? targetConv.messages.map(m => ({
+        role: m.role,
+        content: m.content
+      })) : []
+      // We don't push the current userMessage to messageHistory because the chat route expects just the past history
+
       // --------------------------------------------------------
       // Call the REAL backend
       // --------------------------------------------------------
+
+      setRoutingSteps(prev => [
+        { ...prev[0], label: "Topic matched", status: "complete" },
+        { ...prev[1], status: "active" },
+        prev[2],
+        prev[3]
+      ])
+
+      setCurrentRoutingStep(1)
 
       const response = await fetch("/api/chat", {
         method: "POST",
@@ -114,6 +207,7 @@ export default function ChatPage() {
         body: JSON.stringify({
           prompt: content,
           attachment: attachment,
+          history: messageHistory
         }),
       })
 
@@ -182,7 +276,7 @@ export default function ChatPage() {
         timestamp: new Date(),
       }
 
-      setMessages((prev) => [...prev, assistantMessage])
+      addMessageToTarget(assistantMessage, targetConversationId as string)
     } catch (error) {
       console.error("PSR AI request failed:", error)
 
@@ -195,7 +289,14 @@ export default function ChatPage() {
         timestamp: new Date(),
       }
 
-      setMessages((prev) => [...prev, errorMessage])
+      // If it failed before targetConversationId was set, we might have an issue. Fallback to activeConversationId
+      setConversations((prev) => {
+          const target = activeConversationId || (prev.length > 0 ? prev[prev.length - 1].id : null)
+          if (target) {
+            return prev.map((c) => (c.id === target ? { ...c, messages: [...c.messages, errorMessage] } : c))
+          }
+          return prev
+      })
 
       setRoutingStatus("idle")
     } finally {
@@ -205,14 +306,14 @@ export default function ChatPage() {
         setIsRouting(false)
       }, 800)
     }
-  }, [])
+  }, [activeConversationId, conversations])
 
   // ============================================================
   // NEW CHAT
   // ============================================================
 
   const handleNewChat = () => {
-    setMessages([])
+    setActiveConversationId(null)
     setSelectedModel(null)
     setRoutingStatus("idle")
     setIsRouting(false)
