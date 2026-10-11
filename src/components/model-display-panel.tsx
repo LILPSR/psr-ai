@@ -367,6 +367,164 @@ const getModelInfo = (model: string): ModelInfo => {
   }
 }
 
+function PanelHeader({ color, displayName }: { color: string; displayName: string }) {
+  return (
+    <div className="flex items-center gap-4 mb-6">
+      <div
+        className={`w-12 h-12 rounded-xl bg-gradient-to-br ${color} flex items-center justify-center`}
+      >
+        <Brain className="w-6 h-6 text-white" />
+      </div>
+
+      <div>
+        <h3 className="text-lg font-semibold text-foreground">
+          {displayName}
+        </h3>
+
+        <p className="text-xs text-muted-foreground">
+          Selected Model
+        </p>
+      </div>
+    </div>
+  )
+}
+
+function ModelIdDisplay({ model }: { model: string }) {
+  return (
+    <div className="mb-5">
+      <p className="text-[10px] uppercase tracking-wider text-muted-foreground mb-1">
+        Model ID
+      </p>
+
+      <code className="text-xs text-foreground break-all">
+        {model}
+      </code>
+    </div>
+  )
+}
+
+function ModelDescription({ description }: { description: string }) {
+  return (
+    <p className="text-sm text-muted-foreground mb-6">
+      {description}
+    </p>
+  )
+}
+
+function ModelStrengths({ strengths }: { strengths: string[] }) {
+  return (
+    <div className="mb-6">
+      <h4 className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-2">
+        Best For
+      </h4>
+
+      <div className="flex flex-wrap gap-2">
+        {strengths.map((strength) => (
+          <span
+            key={strength}
+            className="px-2.5 py-1 text-xs rounded-full bg-primary/10 text-primary"
+          >
+            {strength}
+          </span>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+function ModelScores({ scores }: { scores: ModelInfo["scores"] }) {
+  const scoreItems = [
+    {
+      label: "Intelligence",
+      value: scores.intelligence,
+      icon: Brain,
+      color: "bg-primary",
+    },
+    {
+      label: "Speed",
+      value: scores.speed,
+      icon: Zap,
+      color: "bg-accent",
+    },
+    {
+      label: "Cost Efficiency",
+      value: scores.cost,
+      icon: DollarSign,
+      color: "bg-chart-4",
+    },
+    {
+      label: "Reasoning",
+      value: scores.reasoning,
+      icon: Target,
+      color: "bg-chart-3",
+    },
+  ]
+
+  return (
+    <div className="space-y-3 mb-6">
+      {scoreItems.map((score) => (
+        <div
+          key={score.label}
+          className="space-y-1"
+        >
+          <div className="flex items-center justify-between text-xs">
+            <div className="flex items-center gap-1.5 text-muted-foreground">
+              <score.icon className="w-3 h-3" />
+              {score.label}
+            </div>
+
+            <span className="font-medium text-foreground">
+              {score.value}%
+            </span>
+          </div>
+
+          <div className="h-1.5 bg-secondary rounded-full overflow-hidden">
+            <motion.div
+              className={`h-full ${score.color} rounded-full`}
+              initial={{ width: 0 }}
+              animate={{
+                width: `${score.value}%`,
+              }}
+              transition={{
+                duration: 0.5,
+                delay: 0.2,
+              }}
+            />
+          </div>
+        </div>
+      ))}
+    </div>
+  )
+}
+
+function ModelStats({ estimatedLatency, tokenCost }: { estimatedLatency: string; tokenCost: string }) {
+  return (
+    <div className="grid grid-cols-2 gap-4 pt-4 border-t border-border/50">
+      <div>
+        <div className="flex items-center gap-1.5 text-xs text-muted-foreground mb-1">
+          <Clock className="w-3 h-3" />
+          Latency
+        </div>
+
+        <p className="text-sm font-medium text-foreground">
+          {estimatedLatency}
+        </p>
+      </div>
+
+      <div>
+        <div className="flex items-center gap-1.5 text-xs text-muted-foreground mb-1">
+          <Cpu className="w-3 h-3" />
+          Cost
+        </div>
+
+        <p className="text-sm font-medium text-foreground">
+          {tokenCost}
+        </p>
+      </div>
+    </div>
+  )
+}
+
 export function ModelDisplayPanel({
   model,
   isVisible,
@@ -398,149 +556,12 @@ export function ModelDisplayPanel({
         damping: 20,
       }}
     >
-      {/* Header */}
-
-      <div className="flex items-center gap-4 mb-6">
-        <div
-          className={`w-12 h-12 rounded-xl bg-gradient-to-br ${data.color} flex items-center justify-center`}
-        >
-          <Brain className="w-6 h-6 text-white" />
-        </div>
-
-        <div>
-          <h3 className="text-lg font-semibold text-foreground">
-            {data.displayName}
-          </h3>
-
-          <p className="text-xs text-muted-foreground">
-            Selected Model
-          </p>
-        </div>
-      </div>
-
-      {/* Actual model ID */}
-
-      <div className="mb-5">
-        <p className="text-[10px] uppercase tracking-wider text-muted-foreground mb-1">
-          Model ID
-        </p>
-
-        <code className="text-xs text-foreground break-all">
-          {model}
-        </code>
-      </div>
-
-      {/* Description */}
-
-      <p className="text-sm text-muted-foreground mb-6">
-        {data.description}
-      </p>
-
-      {/* Strengths */}
-
-      <div className="mb-6">
-        <h4 className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-2">
-          Best For
-        </h4>
-
-        <div className="flex flex-wrap gap-2">
-          {data.strengths.map((strength) => (
-            <span
-              key={strength}
-              className="px-2.5 py-1 text-xs rounded-full bg-primary/10 text-primary"
-            >
-              {strength}
-            </span>
-          ))}
-        </div>
-      </div>
-
-      {/* Scores */}
-
-      <div className="space-y-3 mb-6">
-        {[
-          {
-            label: "Intelligence",
-            value: data.scores.intelligence,
-            icon: Brain,
-            color: "bg-primary",
-          },
-          {
-            label: "Speed",
-            value: data.scores.speed,
-            icon: Zap,
-            color: "bg-accent",
-          },
-          {
-            label: "Cost Efficiency",
-            value: data.scores.cost,
-            icon: DollarSign,
-            color: "bg-chart-4",
-          },
-          {
-            label: "Reasoning",
-            value: data.scores.reasoning,
-            icon: Target,
-            color: "bg-chart-3",
-          },
-        ].map((score) => (
-          <div
-            key={score.label}
-            className="space-y-1"
-          >
-            <div className="flex items-center justify-between text-xs">
-              <div className="flex items-center gap-1.5 text-muted-foreground">
-                <score.icon className="w-3 h-3" />
-                {score.label}
-              </div>
-
-              <span className="font-medium text-foreground">
-                {score.value}%
-              </span>
-            </div>
-
-            <div className="h-1.5 bg-secondary rounded-full overflow-hidden">
-              <motion.div
-                className={`h-full ${score.color} rounded-full`}
-                initial={{ width: 0 }}
-                animate={{
-                  width: `${score.value}%`,
-                }}
-                transition={{
-                  duration: 0.5,
-                  delay: 0.2,
-                }}
-              />
-            </div>
-          </div>
-        ))}
-      </div>
-
-      {/* Stats */}
-
-      <div className="grid grid-cols-2 gap-4 pt-4 border-t border-border/50">
-        <div>
-          <div className="flex items-center gap-1.5 text-xs text-muted-foreground mb-1">
-            <Clock className="w-3 h-3" />
-            Latency
-          </div>
-
-          <p className="text-sm font-medium text-foreground">
-            {data.estimatedLatency}
-          </p>
-        </div>
-
-        <div>
-          <div className="flex items-center gap-1.5 text-xs text-muted-foreground mb-1">
-            <Cpu className="w-3 h-3" />
-            Cost
-          </div>
-
-          <p className="text-sm font-medium text-foreground">
-            {data.tokenCost}
-          </p>
-        </div>
-      </div>
+      <PanelHeader color={data.color} displayName={data.displayName} />
+      <ModelIdDisplay model={model} />
+      <ModelDescription description={data.description} />
+      <ModelStrengths strengths={data.strengths} />
+      <ModelScores scores={data.scores} />
+      <ModelStats estimatedLatency={data.estimatedLatency} tokenCost={data.tokenCost} />
     </motion.div>
   )
 }
