@@ -15,7 +15,6 @@ export function AnimatedBackground() {
 
     let animationFrameId: number
     let particles: Particle[] = []
-    let connections: Connection[] = []
 
     const resize = () => {
       canvas.width = window.innerWidth
@@ -56,11 +55,6 @@ export function AnimatedBackground() {
       }
     }
 
-    interface Connection {
-      from: Particle
-      to: Particle
-    }
-
     function initParticles() {
       particles = []
       const count = Math.floor((canvas!.width * canvas!.height) / 15000)
@@ -69,34 +63,27 @@ export function AnimatedBackground() {
       }
     }
 
-    function updateConnections() {
-      connections = []
+    function drawConnections() {
       for (let i = 0; i < particles.length; i++) {
+        const p1 = particles[i];
         for (let j = i + 1; j < particles.length; j++) {
-          const dx = particles[i].x - particles[j].x
-          const dy = particles[i].y - particles[j].y
+          const p2 = particles[j];
+          const dx = p1.x - p2.x
+          const dy = p1.y - p2.y
           const distanceSq = dx * dx + dy * dy
           if (distanceSq < 22500) {
-            connections.push({ from: particles[i], to: particles[j] })
+            const distance = Math.sqrt(distanceSq)
+            const opacity = (1 - distance / 150) * 0.15
+
+            ctx!.beginPath()
+            ctx!.moveTo(p1.x, p1.y)
+            ctx!.lineTo(p2.x, p2.y)
+            ctx!.strokeStyle = `rgba(100, 200, 255, ${opacity})`
+            ctx!.lineWidth = 0.5
+            ctx!.stroke()
           }
         }
       }
-    }
-
-    function drawConnections() {
-      connections.forEach((conn) => {
-        const dx = conn.from.x - conn.to.x
-        const dy = conn.from.y - conn.to.y
-        const distance = Math.sqrt(dx * dx + dy * dy)
-        const opacity = (1 - distance / 150) * 0.15
-
-        ctx!.beginPath()
-        ctx!.moveTo(conn.from.x, conn.from.y)
-        ctx!.lineTo(conn.to.x, conn.to.y)
-        ctx!.strokeStyle = `rgba(100, 200, 255, ${opacity})`
-        ctx!.lineWidth = 0.5
-        ctx!.stroke()
-      })
     }
 
     function animate() {
@@ -108,7 +95,6 @@ export function AnimatedBackground() {
         p.draw()
       })
 
-      updateConnections()
       drawConnections()
 
       animationFrameId = requestAnimationFrame(animate)
