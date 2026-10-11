@@ -45,16 +45,12 @@ async function callGemini(
   }
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const contents: any[] = []
-
-  if (history && history.length > 0) {
-    for (const msg of history) {
-      contents.push({
+  const contents: any[] = history && history.length > 0
+    ? history.map(msg => ({
         role: msg.role === "user" ? "user" : "model",
         parts: [{ text: msg.content }]
-      })
-    }
-  }
+      }))
+    : []
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const promptParts: any[] = [{ text: prompt }]
