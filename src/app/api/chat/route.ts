@@ -5,6 +5,9 @@ import { callModel } from "@/lib/ai/providers"
 import { route } from "@/lib/ai/router"
 import { verify } from "@/lib/ai/verifier"
 
+import { PromptAnalysis } from "@/lib/ai/analyzer"
+import { RoutingDecision } from "@/lib/ai/router"
+
 import {
   ChatResponse,
   Confidence,
@@ -12,54 +15,60 @@ import {
   Attachment,
 } from "@/lib/ai/types"
 
+async function parseChatRequest(request: NextRequest) {
+  let prompt = ""
+  let attachment: Attachment | undefined = undefined
+  let history: { role: string; content: string }[] | undefined = undefined
+
+  const contentType = request.headers.get("content-type") || ""
+
+  if (contentType.includes("multipart/form-data")) {
+    const formData = await request.formData()
+    prompt = (formData.get("prompt") as string) || ""
+
+    const historyStr = formData.get("history") as string
+    if (historyStr) {
+      try {
+        history = JSON.parse(historyStr)
+      } catch (e) {
+        // ignore
+      }
+    }
+
+    const file = formData.get("attachment") as File | null
+    const attachmentMeta = formData.get("attachment_meta") as string | null
+
+    if (file && file.size > 0) {
+      const bytes = await file.arrayBuffer()
+      const buffer = Buffer.from(bytes)
+      const base64String = buffer.toString("base64")
+      const mimeType = file.type || "image/jpeg"
+      const type = mimeType.startsWith("video/") ? "video" : "image"
+
+      attachment = {
+        type,
+        url: `data:${mimeType};base64,${base64String}`,
+      }
+    } else if (attachmentMeta) {
+      try {
+        attachment = JSON.parse(attachmentMeta)
+      } catch (e) {
+        // ignore
+      }
+    }
+  } else {
+    const body = await request.json()
+    prompt = body?.prompt || ""
+    attachment = body?.attachment
+    history = body?.history
+  }
+
+  return { prompt, attachment, history }
+}
+
 export async function POST(request: NextRequest) {
   try {
-    let prompt = ""
-    let attachment: Attachment | undefined = undefined
-    let history: { role: string; content: string }[] | undefined = undefined
-
-    const contentType = request.headers.get("content-type") || ""
-
-    if (contentType.includes("multipart/form-data")) {
-      const formData = await request.formData()
-      prompt = (formData.get("prompt") as string) || ""
-
-      const historyStr = formData.get("history") as string
-      if (historyStr) {
-        try {
-          history = JSON.parse(historyStr)
-        } catch (e) {
-          // ignore
-        }
-      }
-
-      const file = formData.get("attachment") as File | null
-      const attachmentMeta = formData.get("attachment_meta") as string | null
-
-      if (file && file.size > 0) {
-        const bytes = await file.arrayBuffer()
-        const buffer = Buffer.from(bytes)
-        const base64String = buffer.toString("base64")
-        const mimeType = file.type || "image/jpeg"
-        const type = mimeType.startsWith("video/") ? "video" : "image"
-
-        attachment = {
-          type,
-          url: `data:${mimeType};base64,${base64String}`,
-        }
-      } else if (attachmentMeta) {
-        try {
-          attachment = JSON.parse(attachmentMeta)
-        } catch (e) {
-          // ignore
-        }
-      }
-    } else {
-      const body = await request.json()
-      prompt = body?.prompt || ""
-      attachment = body?.attachment
-      history = body?.history
-    }
+    const { prompt, attachment, history } = await parseChatRequest(request)
 
     if ((!prompt || !prompt.trim()) && !attachment) {
       return NextResponse.json(
@@ -81,38 +90,7 @@ export async function POST(request: NextRequest) {
     // --------------------------------------------------
 
     if (analysis.is_ambiguous) {
-      const response: ChatResponse = {
-        answer:
-          analysis.ambiguity_clarifying_question ??
-          "Could you clarify what you would like me to do?",
-
-        selected_model: "n/a",
-        provider: "gemini",
-
-        task_type: analysis.task_type,
-        difficulty: analysis.difficulty,
-
-        reasoning: analysis.reasoning,
-
-        route_reasons: [
-          "The request requires clarification before routing.",
-        ],
-
-        tools_requested: [],
-        tools_used: [],
-
-        verification: {
-          performed: false,
-          passed: true,
-          signals: [],
-        },
-
-        confidence: "low",
-
-        needs_clarification: true,
-      }
-
-      return NextResponse.json(response)
+      return NextResponse.json(buildAmbiguousResponse(analysis))
     }
 
     // --------------------------------------------------
@@ -170,64 +148,25 @@ export async function POST(request: NextRequest) {
     // 6. GENERATE PRIMARY ANSWER
     // --------------------------------------------------
 
-    let primaryAnswer = ""
-    let toolsUsed: string[] = []
-
     const finalPrompt = prompt || (attachment ? `Look at this ${attachment.type} I uploaded` : "")
 
-    try {
-      const primary = await callModel(
-        primaryProvider,
-        finalPrompt,
-        primaryModel,
-        analysis.needs_web_search,
-        attachment,
-        history
-      )
+    const {
+      primaryAnswer,
+      primaryProvider: updatedProvider,
+      primaryModel: updatedModel,
+      toolsUsed
+    } = await generateAnswer(
+      primaryProvider,
+      primaryModel,
+      decision,
+      finalPrompt,
+      analysis.needs_web_search,
+      attachment,
+      history
+    )
 
-      primaryAnswer = primary.text
-      primaryProvider = primary.provider
-      primaryModel = primary.model
-
-      toolsUsed = primary.tools_used ?? []
-
-    } catch (error) {
-      console.error(
-        "Primary model failed:",
-        error,
-      )
-
-      // ------------------------------------------------
-      // FALLBACK TO SECONDARY MODEL
-      // ------------------------------------------------
-
-      if (
-        decision.secondary_provider &&
-        decision.secondary_model
-      ) {
-        console.log(
-          "Using fallback model:",
-          decision.secondary_model,
-        )
-
-        const fallback = await callModel(
-          decision.secondary_provider,
-          finalPrompt,
-          decision.secondary_model,
-          false,
-          attachment,
-          history
-        )
-
-        primaryAnswer = fallback.text
-        primaryProvider = fallback.provider
-        primaryModel = fallback.model
-
-        toolsUsed = fallback.tools_used ?? []
-      } else {
-        throw error
-      }
-    }
+    primaryProvider = updatedProvider
+    primaryModel = updatedModel
 
     // --------------------------------------------------
     // 7. VERIFICATION
@@ -235,84 +174,20 @@ export async function POST(request: NextRequest) {
     // Only runs when genuinely useful.
     // --------------------------------------------------
 
-    let verificationResult: VerificationResult = {
-      signals: [],
-      passed: true,
-      needs_regeneration: false,
-    }
-
-    let secondaryProvider:
-      | typeof decision.secondary_provider
-      | undefined = undefined
-
-    let secondaryModel:
-      | typeof decision.secondary_model
-      | undefined = undefined
-
-    if (shouldVerify) {
-      console.log("Starting verification...")
-
-      let secondaryAnswer: string | undefined
-
-      // ----------------------------------------------
-      // Generate secondary answer
-      // ----------------------------------------------
-
-      if (
-        decision.secondary_provider &&
-        decision.secondary_model
-      ) {
-        try {
-          const secondary = await callModel(
-            decision.secondary_provider,
-            finalPrompt,
-            decision.secondary_model,
-            false,
-            attachment,
-            history
-          )
-
-          secondaryAnswer = secondary.text
-
-          secondaryProvider = secondary.provider
-          secondaryModel = secondary.model
-
-        } catch (error) {
-          console.error(
-            "Secondary model failed:",
-            error,
-          )
-        }
-      }
-
-      // ----------------------------------------------
-      // Verify answer
-      // ----------------------------------------------
-
-      try {
-        verificationResult = await verify(
-          prompt,
-          primaryAnswer,
-          secondaryAnswer,
-          analysis.task_type,
-        )
-
-      } catch (error) {
-        console.error(
-          "Verification failed:",
-          error,
-        )
-
-        // A verifier failure should NOT destroy
-        // an otherwise valid primary answer.
-
-        verificationResult = {
-          signals: [],
-          passed: true,
-          needs_regeneration: false,
-        }
-      }
-    }
+    const {
+      verificationResult,
+      secondaryProvider,
+      secondaryModel
+    } = await performVerification(
+      shouldVerify,
+      decision,
+      finalPrompt,
+      prompt,
+      primaryAnswer,
+      analysis.task_type,
+      attachment,
+      history
+    )
 
     // --------------------------------------------------
     // 8. CONFIDENCE
@@ -396,6 +271,156 @@ export async function POST(request: NextRequest) {
       },
       { status: 500 },
     )
+  }
+}
+
+// --------------------------------------------------
+// HELPERS
+// --------------------------------------------------
+
+async function generateAnswer(
+  primaryProvider: string,
+  primaryModel: string,
+  decision: RoutingDecision,
+  finalPrompt: string,
+  needsWebSearch: boolean,
+  attachment?: Attachment,
+  history?: { role: string; content: string }[]
+) {
+  let primaryAnswer = ""
+  let toolsUsed: string[] = []
+  let currentProvider = primaryProvider
+  let currentModel = primaryModel
+
+  try {
+    const primary = await callModel(
+      primaryProvider,
+      finalPrompt,
+      primaryModel,
+      needsWebSearch,
+      attachment,
+      history
+    )
+
+    primaryAnswer = primary.text
+    currentProvider = primary.provider
+    currentModel = primary.model
+    toolsUsed = primary.tools_used ?? []
+
+  } catch (error) {
+    console.error("Primary model failed:", error)
+
+    if (decision.secondary_provider && decision.secondary_model) {
+      console.log("Using fallback model:", decision.secondary_model)
+
+      const fallback = await callModel(
+        decision.secondary_provider,
+        finalPrompt,
+        decision.secondary_model,
+        false,
+        attachment,
+        history
+      )
+
+      primaryAnswer = fallback.text
+      currentProvider = fallback.provider
+      currentModel = fallback.model
+      toolsUsed = fallback.tools_used ?? []
+    } else {
+      throw error
+    }
+  }
+
+  return {
+    primaryAnswer,
+    primaryProvider: currentProvider,
+    primaryModel: currentModel,
+    toolsUsed
+  }
+}
+
+async function performVerification(
+  shouldVerify: boolean,
+  decision: RoutingDecision,
+  finalPrompt: string,
+  prompt: string,
+  primaryAnswer: string,
+  taskType: string,
+  attachment?: Attachment,
+  history?: { role: string; content: string }[]
+) {
+  let verificationResult: VerificationResult = {
+    signals: [],
+    passed: true,
+    needs_regeneration: false,
+  }
+
+  let secondaryProvider: typeof decision.secondary_provider | undefined = undefined
+  let secondaryModel: typeof decision.secondary_model | undefined = undefined
+
+  if (shouldVerify) {
+    console.log("Starting verification...")
+    let secondaryAnswer: string | undefined
+
+    if (decision.secondary_provider && decision.secondary_model) {
+      try {
+        const secondary = await callModel(
+          decision.secondary_provider,
+          finalPrompt,
+          decision.secondary_model,
+          false,
+          attachment,
+          history
+        )
+        secondaryAnswer = secondary.text
+        secondaryProvider = secondary.provider
+        secondaryModel = secondary.model
+      } catch (error) {
+        console.error("Secondary model failed:", error)
+      }
+    }
+
+    try {
+      verificationResult = await verify(prompt, primaryAnswer, secondaryAnswer, taskType)
+    } catch (error) {
+      console.error("Verification failed:", error)
+      verificationResult = { signals: [], passed: true, needs_regeneration: false }
+    }
+  }
+
+  return { verificationResult, secondaryProvider, secondaryModel }
+}
+
+function buildAmbiguousResponse(analysis: PromptAnalysis): ChatResponse {
+  return {
+    answer:
+      analysis.ambiguity_clarifying_question ??
+      "Could you clarify what you would like me to do?",
+
+    selected_model: "n/a",
+    provider: "gemini",
+
+    task_type: analysis.task_type,
+    difficulty: analysis.difficulty,
+
+    reasoning: analysis.reasoning,
+
+    route_reasons: [
+      "The request requires clarification before routing.",
+    ],
+
+    tools_requested: [],
+    tools_used: [],
+
+    verification: {
+      performed: false,
+      passed: true,
+      signals: [],
+    },
+
+    confidence: "low",
+
+    needs_clarification: true,
   }
 }
 
