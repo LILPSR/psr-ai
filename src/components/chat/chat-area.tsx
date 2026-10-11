@@ -2,7 +2,7 @@
 
 import { motion, AnimatePresence } from "framer-motion"
 import { useState, useRef, useEffect } from "react"
-import { Send, Sparkles, User, Copy, ThumbsUp, ThumbsDown, RefreshCw, Paperclip, X, Image as ImageIcon, Video } from "lucide-react"
+import { Send, Sparkles, User, Copy, ThumbsUp, ThumbsDown, RefreshCw, Paperclip, X, Image as ImageIcon } from "lucide-react"
 import ReactMarkdown from "react-markdown"
 
 export interface Attachment {
